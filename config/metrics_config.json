@@ -1,0 +1,49 @@
+{
+  "config_version": "0.2.0",
+  "schema_version": "1.0.0",
+  "windows": {
+    "pass_share_seconds": 300,
+    "danger_seconds": 180,
+    "momentum_seconds": 180,
+    "territorial_seconds": 300,
+    "sufficiency_seconds": 300
+  },
+  "momentum": {
+    "half_life_seconds": 60
+  },
+  "inflection": {
+    "threshold": 0.8,
+    "span_seconds": 120,
+    "step_seconds": 10,
+    "min_window_events": 8
+  },
+  "sufficiency": {
+    "med_from": 10,
+    "high_from": 20
+  },
+  "highlights": {
+    "top_n": 3
+  },
+  "attacking_zones": ["attacking_third", "opp_box"],
+  "weights": {
+    "event": {
+      "pass": 0.1,
+      "carry": 0.2,
+      "dribble": 0.4,
+      "cross": 0.5,
+      "shot": 1.0,
+      "goal": 2.0,
+      "corner": 0.6,
+      "free_kick": 0.3,
+      "interception": 0.3,
+      "tackle": 0.3
+    },
+    "zone": {
+      "own_box": 0.2,
+      "defensive_third": 0.4,
+      "middle_third": 0.7,
+      "attacking_third": 1.0,
+      "opp_box": 1.5
+    }
+  }
+}

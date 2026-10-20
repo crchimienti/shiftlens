@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:shiftlens:schema:explanation:1.0",
+  "title": "ShiftLens explanation output",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["explanation_version", "mode", "minute", "headline", "narrative", "key_points",
+               "limitations", "data_sufficiency", "source"],
+  "properties": {
+    "explanation_version": { "const": "1.0" },
+    "mode": { "enum": ["fan", "analyst"] },
+    "minute": { "type": "integer", "minimum": 0, "maximum": 24 },
+    "headline": { "type": "string", "minLength": 1, "maxLength": 120 },
+    "narrative": { "type": "string", "minLength": 1, "maxLength": 1200 },
+    "key_points": { "type": "array", "minItems": 1, "maxItems": 6, "items": { "$ref": "#/$defs/point" } },
+    "limitations": {
+      "type": "array", "minItems": 1, "maxItems": 6,
+      "items": { "type": "string", "minLength": 1, "maxLength": 300 }
+    },
+    "data_sufficiency": { "enum": ["low", "med", "high"] },
+    "source": { "enum": ["fallback", "llm"] }
+  },
+  "$defs": {
+    "point": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["text", "metric_refs", "event_refs"],
+      "properties": {
+        "text": { "type": "string", "minLength": 1, "maxLength": 300 },
+        "metric_refs": { "type": "array", "items": { "type": "string" }, "uniqueItems": true },
+        "event_refs": { "type": "array", "items": { "type": "string" }, "uniqueItems": true }
+      }
+    }
+  }
+}

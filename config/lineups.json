@@ -1,0 +1,27 @@
+{
+  "lineups_version": "1.0",
+  "note": "Presentation-only synthetic lineups. Formations and slots are authored for display; they are not part of the match data and are not used by any metric.",
+  "matches": {
+    "MP-DEMO-001": {
+      "NBR": {
+        "formation": "4-3-3",
+        "lines": [
+          ["NBR-01"],
+          ["NBR-03", "NBR-05", "NBR-04", "NBR-02"],
+          ["NBR-08", "NBR-06", "NBR-10"],
+          ["NBR-11", "NBR-09", "NBR-07"]
+        ]
+      },
+      "HBC": {
+        "formation": "4-2-3-1",
+        "lines": [
+          ["HBC-01"],
+          ["HBC-03", "HBC-05", "HBC-04", "HBC-02"],
+          ["HBC-06", "HBC-08"],
+          ["HBC-11", "HBC-10", "HBC-07"],
+          ["HBC-09"]
+        ]
+      }
+    }
+  }
+}

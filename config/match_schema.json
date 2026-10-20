@@ -1,0 +1,74 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:shiftlens:schema:match:1.0.0",
+  "title": "ShiftLens synthetic match",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["match_id", "schema_version", "seed", "duration_minutes", "home_team", "away_team", "final_score", "events"],
+  "properties": {
+    "match_id": { "$ref": "#/$defs/id" },
+    "schema_version": { "const": "1.0.0" },
+    "seed": { "type": "integer", "minimum": 0 },
+    "description": { "type": "string" },
+    "duration_minutes": { "type": "integer", "minimum": 18, "maximum": 24 },
+    "home_team": { "$ref": "#/$defs/team" },
+    "away_team": { "$ref": "#/$defs/team" },
+    "final_score": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["home", "away"],
+      "properties": {
+        "home": { "type": "integer", "minimum": 0 },
+        "away": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "events": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/event" } }
+  },
+  "$defs": {
+    "id": { "type": "string", "pattern": "^[A-Za-z0-9_-]+$" },
+    "team": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name", "players"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "name": { "type": "string", "minLength": 1 },
+        "players": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/player" } }
+      }
+    },
+    "player": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name", "number", "position"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "name": { "type": "string", "minLength": 1 },
+        "number": { "type": "integer", "minimum": 1, "maximum": 99 },
+        "position": { "enum": ["GK", "DF", "MF", "FW"] }
+      }
+    },
+    "event": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["event_id", "minute", "second", "period", "team_id", "type", "zone", "sequence_id"],
+      "properties": {
+        "event_id": { "$ref": "#/$defs/id" },
+        "minute": { "type": "integer", "minimum": 0, "maximum": 23 },
+        "second": { "type": "integer", "minimum": 0, "maximum": 59 },
+        "period": { "enum": [1, 2] },
+        "team_id": { "$ref": "#/$defs/id" },
+        "player_id": { "$ref": "#/$defs/id" },
+        "type": {
+          "enum": ["kickoff", "pass", "carry", "dribble", "cross", "shot", "goal", "save",
+                   "tackle", "interception", "clearance", "foul", "free_kick", "corner", "offside"]
+        },
+        "outcome": {
+          "enum": ["complete", "incomplete", "saved", "off_target", "blocked", "won", "lost", "success", "fail"]
+        },
+        "zone": { "enum": ["own_box", "defensive_third", "middle_third", "attacking_third", "opp_box"] },
+        "lane": { "enum": ["left", "center", "right"] },
+        "sequence_id": { "type": "string", "pattern": "\\S" }
+      }
+    }
+  }
+}

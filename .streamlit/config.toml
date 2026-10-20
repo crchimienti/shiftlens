@@ -1,0 +1,18 @@
+# ShiftLens theme foundations. Streamlit picks light or dark from the viewer's settings
+# (⋮ menu → Settings → Theme: System / Light / Dark). Dark is the hero mode for Analyst Lens demos.
+
+[server]
+# Serves ./static at /app/static (brand logo files).
+enableStaticServing = true
+
+[theme.light]
+primaryColor = "#0f8a6f"
+backgroundColor = "#f5f7fb"
+secondaryBackgroundColor = "#e8eef5"
+textColor = "#0b1a33"
+
+[theme.dark]
+primaryColor = "#2dd4a7"
+backgroundColor = "#0a1628"
+secondaryBackgroundColor = "#13233d"
+textColor = "#e6edf6"

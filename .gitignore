@@ -1,0 +1,37 @@
+# Secrets and local settings (keep the committed template)
+.env
+.env.*
+!.env.example
+.streamlit/secrets.toml
+
+# Python
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+
+# Test and tool caches
+.pytest_cache/
+.coverage
+htmlcov/
+.mypy_cache/
+.ruff_cache/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# Local-only evaluation material: never commit (private notes, external samples, previews)
+private/
+data/external_samples/
+data/normalized/
+*.local.json
+
+# Internal working notes (kept locally, not published)
+CLAUDE.md
+PLAN.md
