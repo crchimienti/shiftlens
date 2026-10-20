@@ -35,3 +35,6 @@ data/normalized/
 # Internal working notes (kept locally, not published)
 CLAUDE.md
 PLAN.md
+
+# R session files
+.Rhistory

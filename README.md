@@ -11,6 +11,11 @@ reaches the screen.
 > broadcast scenario built for this project. No real match data, clubs, players, competition data or
 > licensed assets are used. ShiftLens is not affiliated with or endorsed by the Premier League.
 
+## Live demo
+[![Open in Streamlit](https://static.streamlit.io/badges/streamlit_badge_black_white.svg)](https://shiftlens.streamlit.app/)
+
+**https://shiftlens.streamlit.app/**: the synthetic demo, no sign-in or keys needed.
+
 ## Overview
 - **Ingest:** a versioned synthetic match file, schema-validated and fingerprinted.
 - **Interpret:** 8 deterministic metrics (pressure/momentum, pass share, danger index, territory, key moves,
