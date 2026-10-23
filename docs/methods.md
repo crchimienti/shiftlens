@@ -226,6 +226,16 @@ request or the validator.
   paths and rank actions, not to claim precise threat. An earlier version of this document rejected a grid for
   that false-precision risk; it was added once it could be shown as a published, fixed ranking with these
   limits stated next to it.
+- **Views (Analyst Lens, one at a time).** *Gains of this move* (default): paths coloured by threat gain.
+  *Danger map*: the grid for the attacking team as neutral cells with their values; paths keep team colours.
+  *Off*. The attack direction and the target goal are drawn on the pitch in every view. The selected-action card
+  explains one action's gain in words. None of this reaches the validated explanations.
+
+## Analyst notes
+Free text attached to an exact match-clock second (`matchpulse/notes.py`). Clicking a note seeks the replay there,
+paused. Notes live only in the browser session; JSON / Markdown export and JSON import let an analyst keep them.
+Imports are checked (format, match, time range). Notes are escaped when shown and never enter the explanation
+request, the metrics or the validator.
 
 ## Explanation contract
 

@@ -23,6 +23,7 @@ optional model call is the only network path, and the app works without it.
 | Explanation layer | `matchpulse/explain.py`, `config/explanation_schema.json` | Build the request, validate output, deterministic fallback, one retry, cache, traceability rows |
 | Optional model | `matchpulse/foundry_client.py` | Microsoft Foundry / Azure OpenAI chat completions over HTTPS (stdlib only), structured output, evidence package; off by default |
 | Analytics proxies | `matchpulse/analytics.py` | Shot Quality / Chance Creation / Prevented Danger proxies, lineup badges, zone activity, defensive actions, pass links, average action positions, Analyst map figures |
+| Analyst notes | `matchpulse/notes.py` | Session notes at an exact match second; JSON / Markdown export, validated JSON import; never sent to explanations |
 | Zone Threat | `matchpulse/threat.py` | Fixed 5 × 3 threat grid, threat gain per action, Threat Added, move threat, link threat, pitch underlay (display-only) |
 | Brand & themes | `static/brand/`, `.streamlit/config.toml`, `ui.THEMES` | Official logo files served unchanged (static serving) and cropped with CSS; native light/dark theme config; small isolated CSS for panels |
 | Story & lineups | `matchpulse/story.py`, `matchpulse/lineups.py`, `config/lineups.json` | Replay speed steps, factual story feed, card counts, event → move focus; synthetic presentation-only lineups and formations |

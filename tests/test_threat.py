@@ -5,7 +5,7 @@ from streamlit.testing.v1 import AppTest
 from matchpulse import analytics as A
 from matchpulse import threat as T
 from matchpulse.explain import build_request
-from matchpulse.pitch import THREAT_LEGEND, move_events, move_points, pitch_figure, schematic_xy
+from matchpulse.pitch import DANGER_LEGEND, THREAT_LEGEND, move_events, move_points, pitch_figure, schematic_xy
 from matchpulse.replay import Replay
 from matchpulse.validator import CONFIG_PATH, ROOT, load_json, load_match
 
@@ -103,7 +103,7 @@ def test_analyst_pitch_colours_paths_by_threat_and_shows_a_legend(replay, full):
     home, away = replay.match["home_team"], replay.match["away_team"]
     pts = move_points(move_events(full, "S09"), "NBR", replay.players, replay.config)
     gains = T.threat_gains(full["events"])
-    fig = pitch_figure(pts, home, away, detailed=True, threat=gains, underlay=T.threat_underlay(True))
+    fig = pitch_figure(pts, home, away, detailed=True, threat=gains)
     paths = [s for s in fig.layout.shapes if s.type == "path"]
     assert len(paths) == len(pts) - 1
     for a, path in zip(pts, paths):
@@ -112,10 +112,50 @@ def test_analyst_pitch_colours_paths_by_threat_and_shows_a_legend(replay, full):
             assert path.line.color == expected
     assert len([a for a in fig.layout.annotations if a.showarrow]) == len(pts) - 1
     assert any(a.text == THREAT_LEGEND for a in fig.layout.annotations)
-    gold = [s for s in fig.layout.shapes if s.type == "rect" and str(s.fillcolor).startswith("rgba(250,204,21")]
-    assert len(gold) == 15  # the 5 × 3 grid
+    assert not any(a.text == DANGER_LEGEND for a in fig.layout.annotations)
     hovers = [c[6] for t in fig.data if t.customdata is not None for c in t.customdata]
     assert any("Threat" in h and "grid proxy" in h for h in hovers)
+
+
+def test_danger_map_is_neutral_labelled_and_keeps_team_coloured_paths(replay, full):
+    home, away = replay.match["home_team"], replay.match["away_team"]
+    pts = move_points(move_events(full, "S09"), "NBR", replay.players, replay.config)
+    fig = pitch_figure(pts, home, away, detailed=True, underlay=T.threat_underlay(True),
+                       cell_labels=T.threat_cell_labels(True))
+    cells = [s for s in fig.layout.shapes
+             if str(s.fillcolor).startswith(f"rgba({T.DANGER_RGB},") and s.line.width == 0.5]
+    assert len(cells) == 15  # the 5 × 3 grid, in a neutral (white) palette
+    assert not any(str(s.fillcolor).startswith("rgba(250,204,21") for s in cells)  # no gold: gold = goal / focus
+    values = {a.text for a in fig.layout.annotations}
+    assert {"0.40", "0.01"} <= values and any(a.text == DANGER_LEGEND for a in fig.layout.annotations)
+    assert all(p.line.color in ("#2563eb", "#ea580c") for p in fig.layout.shapes if p.type == "path")
+    opp_box_centre = next(c for c in T.threat_cell_labels(True) if c["text"] == "0.40")
+    assert opp_box_centre["x"] > 84  # home attacks right: the most dangerous cell sits at the right-hand box
+    assert next(c for c in T.threat_cell_labels(False) if c["text"] == "0.40")["x"] < 16
+
+
+def test_attack_direction_and_target_goal_are_drawn_on_the_pitch(replay, full):
+    home, away = replay.match["home_team"], replay.match["away_team"]
+    pts = move_points(move_events(full, "S09"), "NBR", replay.players, replay.config)
+    attack = {"team": "Northbridge FC", "target": "Harbor City", "right": True, "color": "#2563eb"}
+    fig = pitch_figure(pts, home, away, detailed=True, threat=T.threat_gains(full["events"]), attack=attack)
+    texts = [str(a.text) for a in fig.layout.annotations]
+    assert any("Northbridge FC attacking →" in t and "Harbor City goal" in t for t in texts)
+    assert any("TARGET GOAL" in t for t in texts)
+    goal_mouth = [s for s in fig.layout.shapes if s.type == "rect" and s.x0 == 100 and s.y0 == 44]
+    assert goal_mouth and goal_mouth[0].line.color == "#facc15"
+    assert len([a for a in fig.layout.annotations if a.showarrow]) == len(pts) - 1  # banner arrow is a shape
+    away_fig = pitch_figure(pts, home, away, detailed=True, attack={**attack, "right": False})
+    assert any(s.type == "rect" and s.x1 == 0 and s.y0 == 44 for s in away_fig.layout.shapes)
+
+
+def test_describe_gain_reads_plainly(full):
+    gains = T.threat_gains(full["events"])
+    up = next(g for g in gains.values() if g["gain"] > 0)
+    back = next(g for g in gains.values() if g["gain"] < 0)
+    assert "more dangerous zone" in T.describe_gain(up, 1, 6) and "#1 of 6" in T.describe_gain(up, 1, 6)
+    assert "safer zone" in T.describe_gain(back)
+    assert "No threat gain measured" in T.describe_gain(None)
 
 
 def test_fan_pitch_has_no_threat_layer(replay, full):
@@ -176,8 +216,11 @@ def test_analyst_workspace_shows_threat_surfaces():
     assert not at.exception
     assert any("Threat Added" in m.value for m in at.markdown)
     assert any("Threat gain" in c.value for c in at.caption)
-    assert at.toggle(key="threat_grid").value is True
-    at.toggle(key="threat_grid").set_value(False).run()
+    assert at.segmented_control(key="threat_view").value == T.VIEW_GAINS
+    assert any("Biggest threat gain in this move" in m.value for m in at.markdown)
+    at.segmented_control(key="threat_view").set_value(T.VIEW_DANGER).run()
+    assert any("Danger map:" in c.value for c in at.caption)
+    at.segmented_control(key="threat_view").set_value(T.VIEW_OFF).run()
     at.segmented_control(key="net_layout").set_value("Formation slot").run()
     assert not at.exception
     assert any("never at measured positions" in c.value for c in at.caption)

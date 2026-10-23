@@ -177,8 +177,10 @@ def test_ui_analyst_workspace_and_fan_layout():
     assert any("Fan Lens · broadcaster companion" in m.value for m in at.markdown)
     next(b for b in at.button if b.label.startswith("Goal moment")).click().run()
     at.radio[0].set_value("Analyst").run()
-    assert [t.label for t in at.tabs] == ["🎯 Move on pitch", "🔥 Activity map", "🔗 Pass network", "🥅 Shot map",
-                                          "🛡️ Defensive actions"]
+    labels = [t.label for t in at.tabs]
+    top = ["🎯 Move", "🗺️ Maps", "📊 Stats & tide", "🧪 Proxy leaders", "👥 Lineups"]
+    maps = ["🔥 Activity map", "🔗 Pass network", "🥅 Shot map", "🛡️ Defensive actions"]
+    assert [x for x in labels if x in top] == top and [x for x in labels if x in maps] == maps
     assert any("Chance Creation Index" in m.value for m in at.markdown)
     assert any("Shot Quality" in m.value for m in at.markdown)
     assert "formula_version" in at.dataframe[-1].value.columns

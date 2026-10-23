@@ -39,6 +39,7 @@ cite the metrics and events behind each claim, and are rejected if they don't ch
 | **First on screen** | the key move on the pitch, compact stats, pressure | tactical workspace and proxy leaders |
 | **Story** | Match Story (who presses, has the ball, connects, threatens; how the game evolved) and Live Story (explains each paused moment) | tactical read with a coaching takeaway, plus a key-moments log |
 | **Visuals** | clean pitch, goal emphasis, lineups one tab away | five-lane tactical board with threat-coloured paths, activity map (team or player), threat-coloured pass network, shot map, defensive actions |
+| **Layout** | key move · stats & pressure · lineups as tabs; Match Story and Live Story in the right rail | tactical workspace (move · maps · stats & tide · proxy leaders · lineups); key moments log, explanation and timestamped notes in the right rail |
 | **Evidence** | one click away | summary first, full evidence table on demand |
 
 ## Architecture
@@ -107,7 +108,7 @@ The Python package and `MATCHPULSE_*` environment variables keep the project's o
 ```bash
 .venv\Scripts\python -m pytest
 ```
-283 tests cover:
+296 tests cover:
 - **Data:** dataset rules, determinism and the fingerprint.
 - **Metrics and proxies:** every metric and the synthetic proxies.
 - **Replay:** speed and state handling.

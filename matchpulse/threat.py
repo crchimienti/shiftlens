@@ -73,8 +73,15 @@ def link_threat(events: list[dict], team_id: str) -> dict[tuple[str, str], float
     return out
 
 
+# Views of the threat layer in the Analyst pitch (one at a time, so colours never mean two things).
+VIEW_GAINS, VIEW_DANGER, VIEW_OFF = "Gains of this move", "Danger map", "Off"
+THREAT_VIEWS = (VIEW_GAINS, VIEW_DANGER, VIEW_OFF)
+DANGER_RGB = "255,255,255"  # neutral: brighter cell = more dangerous zone; no hue shared with the gain paths
+
+
 def threat_underlay(attacks_right: bool) -> list[dict]:
-    """Background shapes: the Zone Threat grid for the team attacking in that direction, gold opacity ∝ value."""
+    """Danger map shapes: the Zone Threat grid for the team attacking in that direction, as neutral white cells
+    (opacity ∝ value) with a thin outline, so the 15 cells read as a grid."""
     from .analytics import cell_rect  # local import: analytics imports pitch, which imports this module
 
     peak = max(v for lanes in ZONE_THREAT.values() for v in lanes.values())
@@ -83,8 +90,35 @@ def threat_underlay(attacks_right: bool) -> list[dict]:
         for lane, v in lanes.items():
             x0, y0, x1, y1 = cell_rect(zone, lane, attacks_right)
             shapes.append({"type": "rect", "x0": x0, "y0": y0, "x1": x1, "y1": y1, "layer": "below",
-                           "line": {"width": 0}, "fillcolor": f"rgba(250,204,21,{0.03 + 0.42 * v / peak:.2f})"})
+                           "line": {"width": 0.5, "color": "rgba(255,255,255,0.35)"},
+                           "fillcolor": f"rgba({DANGER_RGB},{0.04 + 0.50 * v / peak:.2f})"})
     return shapes
+
+
+def threat_cell_labels(attacks_right: bool) -> list[dict]:
+    """The grid value printed in the top-left corner of each cell (x, y, text) for the Danger map; corners rather
+    than centres, because action markers sit at cell centres."""
+    from .analytics import cell_rect
+
+    out = []
+    for zone, lanes in ZONE_THREAT.items():
+        for lane, v in lanes.items():
+            x0, y0, x1, y1 = cell_rect(zone, lane, attacks_right)
+            out.append({"x": min(x0, x1) + 3.2, "y": max(y0, y1) - 3.5, "text": f"{v:.2f}"})
+    return out
+
+
+def describe_gain(gain: dict | None, rank: int | None = None, measured: int = 0) -> str:
+    """Plain-language line for the selected-action card (display only, never sent to explanations)."""
+    if not gain:
+        return ("No threat gain measured: shots, saves, turnovers and the last action of a move have no "
+                "team-mate action after them to measure.")
+    verb = "moved the ball into a more dangerous zone" if gain["gain"] > 0 else (
+        "kept the ball in an equally dangerous zone" if gain["gain"] == 0 else "moved the ball back to a safer zone")
+    text = f"This action {verb}: {gain['from']:.2f} → {gain['to']:.2f}, threat gain {gain['gain']:+.2f}"
+    if rank and measured:
+        text += f" (#{rank} of {measured} measured actions in this move)"
+    return text + "."
 
 
 # --- colour scale (presentation) ------------------------------------------------

@@ -43,6 +43,7 @@ from .presentation import (
     window_label,
 )
 from .replay import DEMO_MOMENTS, Replay, clock_label
+from . import notes as N
 from . import threat as T
 from .story import DEFAULT_SPEED, SPEEDS, event_focus, match_read, speed_step, state_arc, story_moments
 from .validator import CONFIG_PATH, load_json, load_match
@@ -63,6 +64,13 @@ THREAT_HELP = ("Zone Threat: a fixed, published 0–1 grid over the 5 zones × 3
                "centrally). Threat gain = grid value where the team's next action happens − where this action "
                "happened, for passes, crosses, set pieces, carries and dribbles in the same move. Hand-set, not "
                "learned: a grid proxy, not xT and not a probability.")
+THREAT_VIEW_NOTES = {
+    T.VIEW_GAINS: "Gains of this move: path colour shows how much each action raised the danger of where the ball "
+                  "is (redder = bigger gain, grey = none or backwards).",
+    T.VIEW_DANGER: "Danger map: how dangerous each zone is for the attacking team; brighter cell = more dangerous, "
+                   "numbers = cell value. Paths keep their team colours.",
+    T.VIEW_OFF: "Threat layer off.",
+}
 PITCH_NOTE = "Schematic: zone × lane positions, not tracking data; curves show the action type."
 TACTICAL_NOTE = "Five-lane grid (wing · half-space · centre) is a reference overlay; events carry three lanes."
 PLOT_CONFIG = {"displayModeBar": False}
@@ -279,6 +287,61 @@ def on_event_row():
     if rows and rows[0] < len(ids):
         event_id = ids[rows[0]]
         on_focus(event_focus(st.session_state["replay"].snapshot(_state().clock), event_id), event_id)
+
+
+def on_breakdown_row():
+    """Move breakdown: selecting a row selects that action (ring on the pitch + selected-action card)."""
+    rows = st.session_state.get("breakdown_table", {}).get("selection", {}).get("rows", [])
+    ids = st.session_state.get("_breakdown_ids", [])
+    if rows and rows[0] < len(ids):
+        st.session_state["selected_event"] = ids[rows[0]]
+
+
+def _notes() -> list[dict]:
+    return st.session_state.setdefault("notes", [])
+
+
+def on_add_note():
+    text = (st.session_state.get("note_text") or "").strip()
+    if not text:
+        st.session_state["notes_notice"] = "Write something first."
+        return
+    seq = st.session_state.get("note_seq", 0) + 1
+    st.session_state["note_seq"] = seq
+    note = N.make_note(seq, _state().clock, text, _mode(), st.session_state.get("selected_move"))
+    st.session_state["notes"] = N.merge(_notes(), [note])
+    st.session_state["note_text"] = ""
+    st.session_state.pop("notes_notice", None)
+
+
+def on_note_jump(note_id: int):
+    """Seek the replay to the note's exact second (paused) and reselect the move it was written on."""
+    note = next((n for n in _notes() if n["id"] == note_id), None)
+    if note:
+        _clear_explanation()
+        _state().jump_to(note["seconds"])
+        if note["move_id"]:
+            st.session_state["selected_move"] = note["move_id"]
+            st.session_state.pop("selected_event", None)
+
+
+def on_note_delete(note_id: int):
+    st.session_state["notes"] = [n for n in _notes() if n["id"] != note_id]
+
+
+def on_import_notes():
+    upload = st.session_state.get("notes_upload")
+    if upload is None:
+        return
+    replay = st.session_state["replay"]
+    seq = st.session_state.get("note_seq", 0) + 1
+    incoming, errors = N.parse_import(upload.getvalue(), replay.match["match_id"], replay.duration, seq)
+    st.session_state["note_seq"] = seq + len(incoming)
+    before = len(_notes())
+    st.session_state["notes"] = N.merge(_notes(), incoming)
+    added = len(st.session_state["notes"]) - before
+    st.session_state["notes_notice"] = (f"Imported {added} note(s)." + (f" Skipped: {' '.join(errors[:3])}"
+                                                                       if errors else ""))
 
 
 def on_featured_move():
@@ -540,15 +603,25 @@ def render_key_moves(replay: Replay, snap: dict, analyst: bool):
                     format_func=lambda sid: _move_label(by_id[sid], names))
     events = move_events(snap, move["sequence_id"])
     points = move_points(events, home["id"], replay.players, replay.config)
-    gains, underlay = None, None
+    gains = underlay = labels = attack = None
+    view = None
     if analyst:
-        gains = T.threat_gains(snap["events"])
-        if st.toggle("Show the Zone Threat grid", value=True, key="threat_grid", help=THREAT_HELP):
-            underlay = T.threat_underlay(attacks_right=move["team_id"] == home["id"])
+        if not st.session_state.get("threat_view"):  # default, and re-select if the active option was clicked off
+            st.session_state["threat_view"] = T.VIEW_GAINS
+        st.segmented_control("Threat view", list(T.THREAT_VIEWS), key="threat_view", help=THREAT_HELP)
+        view = st.session_state["threat_view"]
+        right = move["team_id"] == home["id"]
+        if view == T.VIEW_GAINS:
+            gains = T.threat_gains(snap["events"])
+        elif view == T.VIEW_DANGER:
+            underlay, labels = T.threat_underlay(right), T.threat_cell_labels(right)
+        attack = {"team": names[move["team_id"]], "target": (away if right else home)["name"], "right": right,
+                  "color": HOME_COLOR if right else AWAY_COLOR}
     st.plotly_chart(pitch_figure(points, home, away, detailed=analyst, highlight=st.session_state.get("selected_event"),
-                                 palette=_pal(), threat=gains, underlay=underlay), config=PLOT_CONFIG, key="pitch")
-    st.caption((TACTICAL_NOTE + " Gold shading = Zone Threat grid for the attacking team; " if analyst else "")
-               + PITCH_NOTE)
+                                 palette=_pal(), threat=gains, underlay=underlay, cell_labels=labels, attack=attack),
+                    config=PLOT_CONFIG, key="pitch")
+    st.caption((THREAT_VIEW_NOTES[view] + " Zone Threat is a fixed grid, not xT. " + TACTICAL_NOTE + " "
+                if analyst else "") + PITCH_NOTE)
     return move, events, points
 
 
@@ -580,16 +653,46 @@ def render_move_card(replay: Replay, snap: dict, move: dict, events: list[dict],
                   help="Pause the replay at the end of this move so you can explain that moment.")
 
 
+def render_action_card(replay: Replay, snap: dict, move: dict, points: list[dict]) -> None:
+    """Selected-action card (Analyst): the selected action, or by default the move's biggest threat gain, with
+    where the ball went and what that did on the Zone Threat grid. Display only."""
+    gains = T.threat_gains(snap["events"])
+    ids = [p["event_id"] for p in points]
+    measured = sorted((gains[e] for e in ids if e in gains), key=lambda g: (-g["gain"], ids.index(g["event_id"])))
+    chosen = st.session_state.get("selected_event")
+    picked = chosen in ids
+    if not picked:
+        chosen = measured[0]["event_id"] if measured else ids[-1]
+    by_id = {ev["event_id"]: ev for ev in snap["events"]}
+    ev, point = by_id[chosen], next(p for p in points if p["event_id"] == chosen)
+    gain = gains.get(chosen)
+    rank = next((i for i, g in enumerate(measured, 1) if g["event_id"] == chosen), None)
+    where = lambda e: f"{nice(e['zone']).lower()} · {nice(e['lane'] or 'center').lower()}"
+    with st.container(border=True):
+        _title("🎯 Selected action" if picked else "🎯 Biggest threat gain in this move",
+               "select a breakdown row to change it")
+        st.markdown(f"**{point['time']} · {point['action']}" + (f" · {point['player']}" if point["player"] else "")
+                    + f"** ({_names(replay)[ev['team_id']]})")
+        if gain:
+            nxt = by_id[gain["to_event_id"]]
+            receiver = replay.players[nxt["player_id"]]["name"] if nxt.get("player_id") else _names(replay)[nxt["team_id"]]
+            st.caption(f"From {where(ev)} → {where(nxt)} · next: {receiver} ({nice(nxt['type']).lower()})")
+        st.markdown(T.describe_gain(gain, rank, len(measured)))
+        st.caption("Zone Threat grid proxy, not xT. Not used by the validated explanations.", help=THREAT_HELP)
+
+
 def render_move_breakdown(replay: Replay, snap: dict, move: dict, points: list[dict]) -> None:
     names = _names(replay)
     m = snap["metrics"]
     st.markdown("**Move breakdown**")
     gains = T.threat_gains(snap["events"])
+    st.session_state["_breakdown_ids"] = [p["event_id"] for p in points]
     rows = [{"#": p["step"], "Time": p["time"], "Team": names[p["team_id"]], "Player": p["player"],
              "Action": p["action"], "Outcome": nice(p["outcome"]), "Weight": p["weight"],
              "Threat Δ": gains[p["event_id"]]["gain"] if p["event_id"] in gains else None, "Event ID": p["event_id"]}
             for p in points]
-    st.dataframe(rows, hide_index=True, width="stretch",
+    st.dataframe(rows, hide_index=True, width="stretch", key="breakdown_table", on_select=on_breakdown_row,
+                 selection_mode="single-row",
                  column_config={"Weight": st.column_config.NumberColumn(
                      "Weight", format="%.2f", help="Event-type weight × zone weight; the weights add up to the impact."),
                      "Threat Δ": st.column_config.NumberColumn(
@@ -602,6 +705,7 @@ def render_move_breakdown(replay: Replay, snap: dict, move: dict, points: list[d
         related.append("part of the turning-point window")
     if ids & set(m["momentum"]["source_event_ids"]):
         related.append("still counts towards current momentum")
+    st.caption("Select a row to ring that action on the pitch and explain its threat gain.")
     st.caption(f"Source events: {', '.join(move['event_ids'])} · impact {move['score']:.2f} = sum of weights"
                + (f" · Related: {'; '.join(related)}" if related else ""))
 
@@ -753,7 +857,11 @@ def render_explanation(replay: Replay, snap: dict, state) -> None:
         _render_fan(exp)
         st.caption("Auto story · deterministic fallback · validated ✓ · press Explain for the full version")
     elif fan and state.playing:
-        st.caption("The story pauses with the replay. Follow the key moments, or pause to hear this moment.")
+        latest = story_moments(snap, replay.match, replay.players)
+        if latest:
+            st.markdown(f'<div class="sl-moment"><b>Latest · {latest[0]["clock"]}</b> {latest[0]["icon"]} '
+                        f'{escape(latest[0]["text"])}</div>', unsafe_allow_html=True)
+        st.caption("The full story pauses with the replay: pause to hear this moment explained.")
         return
     else:
         st.caption("Pause, then press Explain for a referenced explanation of this second.")
@@ -765,6 +873,39 @@ def render_explanation(replay: Replay, snap: dict, state) -> None:
         with st.expander(f"Data limits ({len(limits)})"):
             st.markdown("**Data limits**")
             st.caption("\n".join(f"- {t}" for t in limits))
+
+
+def render_notes(replay: Replay, state) -> None:
+    """Analyst notes attached to the exact match clock; click a time to seek there (paused)."""
+    notes = N.ordered(_notes())
+    _title("📝 Analyst notes", "attached to the match clock · kept for this session")
+    with st.form("note_form", clear_on_submit=True, border=False):  # text and click are submitted together
+        st.text_area("Note", key="note_text", height=68, max_chars=N.MAX_TEXT, label_visibility="collapsed",
+                     placeholder=f"What do you see at Min {clock_label(state.clock)}?")
+        st.form_submit_button(f"Add note at Min {clock_label(state.clock)}", on_click=on_add_note,
+                              icon=":material/add:", width="stretch")
+    notice = st.session_state.get("notes_notice")
+    if notice:
+        st.caption(notice)
+    for n in notes:
+        c_time, c_text, c_del = st.columns([1.9, 3.4, 0.7], vertical_alignment="center")
+        c_time.button(f"Min {n['clock']}", key=f"note_go_{n['id']}", on_click=on_note_jump, args=(n["id"],),
+                      help="Jump the replay to this second (paused)", width="stretch")
+        c_text.markdown(escape(n["text"]))
+        c_del.button("✕", key=f"note_del_{n['id']}", on_click=on_note_delete, args=(n["id"],), help="Delete note")
+    if not notes:
+        st.caption("No notes yet. Pause on a moment, write, then Add.")
+    c_json, c_md = st.columns(2)
+    c_json.download_button("Export .json", N.to_json(notes, replay.match["match_id"]), "shiftlens_notes.json",
+                           "application/json", disabled=not notes, width="stretch", key="notes_json")
+    title = " vs ".join(t["name"] for t in _teams(replay))
+    c_md.download_button("Export .md", N.to_markdown(notes, title), "shiftlens_notes.md", "text/markdown",
+                         disabled=not notes, width="stretch", key="notes_md")
+    with st.expander("Import notes (.json export)"):
+        st.file_uploader("Notes file", type=["json"], key="notes_upload", on_change=on_import_notes,
+                         label_visibility="collapsed")
+        st.caption("Notes stay in this browser session only; export them to keep them. They are never sent to "
+                   "the explanation layer.")
 
 
 def render_proxies(replay: Replay, snap: dict) -> None:
@@ -794,17 +935,19 @@ def render_workspace(replay: Replay, snap: dict, theme: str) -> None:
     home, away = _teams(replay)
     colors = _colors(replay)
     events = snap["events"]
-    tabs = st.tabs(["🎯 Move on pitch", "🔥 Activity map", "🔗 Pass network", "🥅 Shot map", "🛡️ Defensive actions"])
-    with tabs[0]:
-        c_pitch, c_card = st.columns([3, 2], gap="medium")
-        with c_pitch:
-            move, mv_events, points = render_key_moves(replay, snap, analyst=True)
-        with c_card:
-            if move:
+    tabs = st.tabs(["🎯 Move", "🗺️ Maps", "📊 Stats & tide", "🧪 Proxy leaders", "👥 Lineups"])
+    maps = tabs[1].tabs(["🔥 Activity map", "🔗 Pass network", "🥅 Shot map", "🛡️ Defensive actions"])
+    with tabs[0]:  # the pitch gets the full workspace width; the two cards sit side by side below it
+        move, mv_events, points = render_key_moves(replay, snap, analyst=True)
+        if move:
+            c_move, c_action = st.columns(2, gap="medium")
+            with c_move:
                 render_move_card(replay, snap, move, mv_events, analyst=True)
+            with c_action:
+                render_action_card(replay, snap, move, points)
         if move:
             render_move_breakdown(replay, snap, move, points)
-    with tabs[1]:
+    with maps[0]:
         active = sorted({ev["player_id"] for ev in events if ev.get("player_id")},
                         key=lambda pid: (pid[:3] != home["id"], replay.players[pid]["number"]))
         options = ["Both teams"] + active
@@ -825,7 +968,7 @@ def render_workspace(replay: Replay, snap: dict, theme: str) -> None:
             st.plotly_chart(A.zone_heatmap_figure(events, team, right, HOME_RGB if right else AWAY_RGB, player_id=pick),
                             config=PLOT_CONFIG, key="heat_player_map")
         st.caption("Counts of actions per zone × lane cell so far: a schematic heat map of cells, not coordinates.")
-    with tabs[2]:
+    with maps[1]:
         lineups = get_lineups()
         layout = st.segmented_control("Players placed at", ["Average action cell", "Formation slot"],
                                       default="Average action cell", key="net_layout")
@@ -850,7 +993,7 @@ def render_workspace(replay: Replay, snap: dict, theme: str) -> None:
                    "next action in the same move. Line width = links; line colour = threat gain moved along the link "
                    "(Zone Threat grid, grey = none); the busiest links show their count. Players sit at the average "
                    "of their zone × lane cells or at their formation slots, never at measured positions.")
-    with tabs[3]:
+    with maps[2]:
         shot_list = A.shots(events, home["id"])
         summary = A.team_shot_summary(shot_list, (home["id"], away["id"]))
         c_map, c_tab = st.columns([3, 2], gap="medium")
@@ -865,7 +1008,7 @@ def render_workspace(replay: Replay, snap: dict, theme: str) -> None:
                    for label, k in (("Shots", "shots"), ("Goals", "goals"), ("SQI total", "sqi_total"),
                                     ("SQI per shot", "sqi_avg"), ("Best chance (SQI)", "best"))]))
             st.caption(SQI_HELP)
-    with tabs[4]:
+    with maps[3]:
         pts = A.defensive_actions(events, home["id"])
         st.plotly_chart(A.defensive_map_figure(pts, home, away, colors, replay.players), config=PLOT_CONFIG,
                         key="def_map")
@@ -874,6 +1017,16 @@ def render_workspace(replay: Replay, snap: dict, theme: str) -> None:
         st.caption(" · ".join(f"{t['name']}: " + ", ".join(f"{n} {k}s" for k, n in counts[t["id"]].items() if n)
                               for t in (home, away))
                    + " · ✕ tackle · ⬡ interception · ▲ clearance · ■ save. Schematic positions (zone × lane).")
+    with tabs[2]:
+        c_stats, c_flow = st.columns([2, 3], gap="medium")
+        with c_stats:
+            render_summary(replay, snap)
+        with c_flow:
+            render_pressure(replay, snap, True, theme)
+    with tabs[3]:
+        render_proxies(replay, snap)
+    with tabs[4]:
+        render_lineups(replay, snap, analyst=True)
 
 
 TRACE_COLUMNS = {
@@ -939,52 +1092,42 @@ def render(dataset_path: str) -> None:
     render_kpis(replay, snap, analyst)
 
     if analyst:
-        # 2. Tactical workspace first, proxy leaders beside it
-        c_work, c_side = st.columns([3, 1.3], gap="medium")
+        # 2. Tactical workspace = the analytical surface (move, maps, stats & tide, proxy leaders, lineups);
+        #    the right rail holds the story: key moments log, analyst explanation, notes
+        c_work, c_rail = st.columns([2.45, 1.55], gap="medium")
         with c_work, st.container(border=True):
             _title("📋 Tactical workspace", "schematic · proxy-based · synthetic data")
             render_workspace(replay, snap, theme)
-        with c_side, st.container(border=True):
-            render_proxies(replay, snap)
-        # 3. Match stats and the tide of the game in one panel
-        with st.container(border=True):
-            c_stats, c_flow = st.columns([2, 3], gap="medium")
-            with c_stats:
-                render_summary(replay, snap)
-            with c_flow:
-                render_pressure(replay, snap, analyst, theme)
-        # 4. Key moments log + lineups, explanation on the right
-        c_left, c_right = st.columns([3, 2], gap="medium")
-        with c_left:
+        with c_rail:
+            with st.container(border=True, height=430):  # scrolls inside, so the rail keeps its shape
+                render_match_story(replay, snap, "📋 Key moments log", 8, "Moments")
             with st.container(border=True):
-                render_match_story(replay, snap, "📋 Key moments log", 5, "Moments")
+                render_explanation(replay, snap, state)
             with st.container(border=True):
-                render_lineups(replay, snap, analyst=True)
-        with c_right, st.container(border=True):
-            render_explanation(replay, snap, state)
+                render_notes(replay, state)
     else:
-        # 2. Key moments first: the move on the pitch (lineups one tab away), compact stats + pressure beside it
-        c_pitch, c_side = st.columns([3, 2], gap="medium")
-        with c_pitch, st.container(border=True):
+        # 2. Pictures and numbers on the left (key move · stats & pressure · lineups), the story on the right
+        c_main, c_rail = st.columns([3, 2], gap="medium")
+        with c_main, st.container(border=True):
             _title("⚽ Key moments")
-            tab_move, tab_line = st.tabs(["⚽ Key move", "👥 Lineups"])
+            tab_move, tab_stats, tab_line = st.tabs(["⚽ Key move", "📊 Stats & pressure", "👥 Lineups"])
             with tab_move:
                 move, events, points = render_key_moves(replay, snap, analyst=False)
                 if move:
                     render_move_card(replay, snap, move, events, analyst=False)
+            with tab_stats:
+                c_stats, c_flow = st.columns([1, 1.25], gap="medium")
+                with c_stats:
+                    render_summary(replay, snap, compact=True)
+                with c_flow:
+                    render_pressure(replay, snap, analyst, theme, compact=True)
             with tab_line:
                 render_lineups(replay, snap, analyst=False)
-        with c_side:
+        with c_rail:
             with st.container(border=True):
-                render_summary(replay, snap, compact=True)
+                render_match_story(replay, snap, "📰 Match Story", 3, "Key moments")
             with st.container(border=True):
-                render_pressure(replay, snap, analyst, theme, compact=True)
-        # 3. Match Story (left) and Live Story (right)
-        c_story, c_live = st.columns(2, gap="medium")
-        with c_story, st.container(border=True):
-            render_match_story(replay, snap, "📰 Match Story", 4, "Key moments")
-        with c_live, st.container(border=True):
-            render_explanation(replay, snap, state)
+                render_explanation(replay, snap, state)
     # 4. Evidence
     render_timeline(replay, snap, analyst)
     render_traceability(replay, snap)
