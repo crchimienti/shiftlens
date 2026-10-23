@@ -43,6 +43,7 @@ from .presentation import (
     window_label,
 )
 from .replay import DEMO_MOMENTS, Replay, clock_label
+from . import threat as T
 from .story import DEFAULT_SPEED, SPEEDS, event_focus, match_read, speed_step, state_arc, story_moments
 from .validator import CONFIG_PATH, load_json, load_match
 
@@ -58,6 +59,10 @@ IMPACT_HELP = ("Impact = weighted sum of a move's actions: passes, carries, cros
                "Higher means more dangerous. It is a simple index, not xG.")
 SQI_HELP = ("Shot Quality Index: a transparent 0–1 proxy from the shot's zone, lane and the action that set it up. "
             "Synthetic and explainable. Not xG and not a probability.")
+THREAT_HELP = ("Zone Threat: a fixed, published 0–1 grid over the 5 zones × 3 lanes (higher near goal and "
+               "centrally). Threat gain = grid value where the team's next action happens − where this action "
+               "happened, for passes, crosses, set pieces, carries and dribbles in the same move. Hand-set, not "
+               "learned: a grid proxy, not xT and not a probability.")
 PITCH_NOTE = "Schematic: zone × lane positions, not tracking data; curves show the action type."
 TACTICAL_NOTE = "Five-lane grid (wing · half-space · centre) is a reference overlay; events carry three lanes."
 PLOT_CONFIG = {"displayModeBar": False}
@@ -535,9 +540,15 @@ def render_key_moves(replay: Replay, snap: dict, analyst: bool):
                     format_func=lambda sid: _move_label(by_id[sid], names))
     events = move_events(snap, move["sequence_id"])
     points = move_points(events, home["id"], replay.players, replay.config)
+    gains, underlay = None, None
+    if analyst:
+        gains = T.threat_gains(snap["events"])
+        if st.toggle("Show the Zone Threat grid", value=True, key="threat_grid", help=THREAT_HELP):
+            underlay = T.threat_underlay(attacks_right=move["team_id"] == home["id"])
     st.plotly_chart(pitch_figure(points, home, away, detailed=analyst, highlight=st.session_state.get("selected_event"),
-                                 palette=_pal()), config=PLOT_CONFIG, key="pitch")
-    st.caption((TACTICAL_NOTE + " " if analyst else "") + PITCH_NOTE)
+                                 palette=_pal(), threat=gains, underlay=underlay), config=PLOT_CONFIG, key="pitch")
+    st.caption((TACTICAL_NOTE + " Gold shading = Zone Threat grid for the attacking team; " if analyst else "")
+               + PITCH_NOTE)
     return move, events, points
 
 
@@ -558,6 +569,12 @@ def render_move_card(replay: Replay, snap: dict, move: dict, events: list[dict],
         if analyst:
             detail += f" · {stats['players']} players"
         st.caption(detail, help=IMPACT_HELP)
+        if analyst:
+            own = [ev for ev in snap["events"] if ev["sequence_id"] == move["sequence_id"]
+                   and ev["team_id"] == move["team_id"]]
+            mt = T.move_threat(own)
+            st.caption(f"**Threat gain {mt['net_gain']:+.2f}** · most dangerous cell reached {mt['peak']:.2f} · "
+                       f"{mt['measured_actions']} measured actions · grid proxy, not xT", help=THREAT_HELP)
         st.button(f"Jump replay to {clock_label(move['end_seconds'])}", icon=":material/fast_forward:",
                   on_click=on_jump_move, args=(move["sequence_id"], move["end_seconds"]), width="stretch",
                   help="Pause the replay at the end of this move so you can explain that moment.")
@@ -567,12 +584,16 @@ def render_move_breakdown(replay: Replay, snap: dict, move: dict, points: list[d
     names = _names(replay)
     m = snap["metrics"]
     st.markdown("**Move breakdown**")
+    gains = T.threat_gains(snap["events"])
     rows = [{"#": p["step"], "Time": p["time"], "Team": names[p["team_id"]], "Player": p["player"],
-             "Action": p["action"], "Outcome": nice(p["outcome"]), "Weight": p["weight"], "Event ID": p["event_id"]}
+             "Action": p["action"], "Outcome": nice(p["outcome"]), "Weight": p["weight"],
+             "Threat Δ": gains[p["event_id"]]["gain"] if p["event_id"] in gains else None, "Event ID": p["event_id"]}
             for p in points]
     st.dataframe(rows, hide_index=True, width="stretch",
                  column_config={"Weight": st.column_config.NumberColumn(
-                     "Weight", format="%.2f", help="Event-type weight × zone weight; the weights add up to the impact.")})
+                     "Weight", format="%.2f", help="Event-type weight × zone weight; the weights add up to the impact."),
+                     "Threat Δ": st.column_config.NumberColumn(
+                         "Threat Δ", format="%+.2f", help=THREAT_HELP + " Empty = no measured destination.")})
     ids = set(move["event_ids"])
     related = []
     if ids & set(m["score"]["source_event_ids"]):
@@ -759,6 +780,10 @@ def render_proxies(replay: Replay, snap: dict) -> None:
     prog = sorted(A.progressive_actions(snap["events"]).items(), key=lambda kv: (-kv[1]["progressive"], kv[0]))[:3]
     lines += ["", "**Ball Progression** (actions that move the ball into a more advanced zone)"]
     lines += [f"- {players[p]['name']} · {r['progressive']} progressive action(s)" for p, r in prog] or ["- none yet"]
+    added = sorted(T.player_threat(snap["events"]).items(), key=lambda kv: (-kv[1]["added"], kv[0]))[:3]
+    lines += ["", "**Threat Added** (sum of positive threat gains, Zone Threat grid · not xT)"]
+    lines += [f"- {players[p]['name']} · +{r['added']:.2f} from {r['forward']} forward action(s)"
+              for p, r in added if r["added"] > 0] or ["- none yet"]
     lines += ["", "**Prevented Danger** (sum of SQI of shots saved)"]
     lines += [f"- {players[p]['name']} · {r['prevented']:.2f} from {r['saves']} save(s)" for p, r in keep] or ["- none yet"]
     st.markdown("\n".join(lines))
@@ -802,15 +827,29 @@ def render_workspace(replay: Replay, snap: dict, theme: str) -> None:
         st.caption("Counts of actions per zone × lane cell so far: a schematic heat map of cells, not coordinates.")
     with tabs[2]:
         lineups = get_lineups()
+        layout = st.segmented_control("Players placed at", ["Average action cell", "Formation slot"],
+                                      default="Average action cell", key="net_layout")
+        p_threat = T.player_threat(events)
         cols = st.columns(2)
         for col, team, right in zip(cols, (home, away), (True, False)):
             links = A.pass_links(events, team["id"])
-            slots = lineup_slots(team_lineup(replay.match, team, lineups), attacks_right=right)
+            if layout == "Formation slot":
+                slots = lineup_slots(team_lineup(replay.match, team, lineups), attacks_right=right)
+            else:
+                slots = A.average_action_positions(events, team["id"], right)
             col.markdown(f"**{team['name']}** · {sum(links.values())} links")
-            col.plotly_chart(A.pass_network_figure(links, slots, team, colors[team["id"]], replay.players),
+            col.plotly_chart(A.pass_network_figure(links, slots, team, colors[team["id"]], replay.players,
+                                                   threat=T.link_threat(events, team["id"]),
+                                                   player_threat=p_threat, label_top=3),
                              config=PLOT_CONFIG, key=f"net_{team['id']}")
+            top = sorted(A.merged_links(links, T.link_threat(events, team["id"])).items(),
+                         key=lambda kv: (-kv[1]["n"], kv[0]))[:3]
+            col.caption(" · ".join(f"{replay.players[a]['name'].split()[-1]}–{replay.players[b]['name'].split()[-1]} "
+                                   f"{r['n']}× ({r['gain']:+.2f})" for (a, b), r in top) or "No links yet.")
         st.caption("Schematic pass network: a link = a pass, cross, corner or free kick followed by a team-mate's "
-                   "next action in the same move. Players sit at their formation slots, not average positions.")
+                   "next action in the same move. Line width = links; line colour = threat gain moved along the link "
+                   "(Zone Threat grid, grey = none); the busiest links show their count. Players sit at the average "
+                   "of their zone × lane cells or at their formation slots, never at measured positions.")
     with tabs[3]:
         shot_list = A.shots(events, home["id"])
         summary = A.team_shot_summary(shot_list, (home["id"], away["id"]))

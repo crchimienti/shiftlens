@@ -27,7 +27,7 @@ For fans, streaming viewers and presenters who need a fast, engaging read.
 For analysts, coaches, scouts and studio producers who need compact tactical insight.
 - **Tactical workspace:** the move on a five-lane board, an activity map (team or single player), a pass network,
   a shot map and defensive actions.
-- **Proxy leaders:** chance creation, ball progression and prevented danger.
+- **Proxy leaders:** chance creation, ball progression, threat added and prevented danger.
 - **Tactical read:** how momentum, ball, threat and territory line up, ending with a coaching takeaway.
 - **Traceability:** a summary first, with the full evidence (formula and config versions, source event ids) on demand.
 

@@ -199,6 +199,21 @@ def team_progression(events: list[dict], team_ids: tuple[str, str]) -> dict[str,
     return {t: sum(r["progressive"] for p, r in prog.items() if p.startswith(f"{t}-")) for t in team_ids}
 
 
+def average_action_positions(events: list[dict], team_id: str, attacks_right: bool) -> list[dict]:
+    """Per player of `team_id`: the mean of the schematic cell centres of their actions so far (derived from
+    zone × lane, not tracking). Same shape as lineup slots, plus the action count `n`."""
+    sums: dict[str, list[float]] = {}
+    for ev in events:
+        if ev["team_id"] == team_id and ev.get("player_id"):
+            x, y = schematic_xy(ev["zone"], ev["lane"], attacks_right)
+            row = sums.setdefault(ev["player_id"], [0.0, 0.0, 0])
+            row[0] += x
+            row[1] += y
+            row[2] += 1
+    return [{"player_id": pid, "x": round(sx / n, 2), "y": round(sy / n, 2), "n": n}
+            for pid, (sx, sy, n) in sorted(sums.items())]
+
+
 # --- figures ---------------------------------------------------------------------
 
 def _base_layout(fig, height: int = 300):
@@ -278,38 +293,63 @@ def shot_map_figure(shot_list: list[dict], home: dict, away: dict, colors: dict,
     return _base_layout(fig)
 
 
-def pass_network_figure(links: dict, slots: list[dict], team: dict, color: str, players: dict):
-    """Schematic pass network: players at their formation slots (not average positions). Lines are thin and
-    get thicker / more opaque with repeated links; markers are small, labelled with surname. Hover a line or
-    a player for the counts."""
+def merged_links(links: dict, threat: dict | None = None) -> dict[tuple[str, str], dict]:
+    """Both directions of a link merged: {(a, b) sorted: {"n": count, "gain": summed threat gain or None}}."""
+    pairs: dict[tuple[str, str], dict] = {}
+    for (a, b), n in links.items():
+        row = pairs.setdefault(tuple(sorted((a, b))), {"n": 0, "gain": 0.0 if threat is not None else None})
+        row["n"] += n
+        if threat is not None:
+            row["gain"] = round(row["gain"] + threat.get((a, b), 0.0), 2)
+    return pairs
+
+
+def pass_network_figure(links: dict, slots: list[dict], team: dict, color: str, players: dict,
+                        threat: dict | None = None, player_threat: dict | None = None, label_top: int = 0):
+    """Schematic pass network. Players sit at the given positions (formation slots or average action cells).
+    Lines get thicker / more opaque with repeated links. With `threat` ((passer, receiver) -> summed threat
+    gain) a line is coloured by the threat gain moved along it (grey = none); `label_top` writes the count on
+    the busiest links. Hover a line or a player for the counts."""
     import plotly.graph_objects as go
+
+    from .threat import threat_color
 
     pos = {s["player_id"]: (s["x"], s["y"]) for s in slots}
     fig = go.Figure()
     peak = max(links.values(), default=1)
-    pairs: dict[tuple[str, str], int] = {}
-    for (a, b), n in links.items():  # merge both directions into one line
-        key = tuple(sorted((a, b)))
-        pairs[key] = pairs.get(key, 0) + n
-    for (a, b), n in sorted(pairs.items()):
+    pairs = merged_links(links, threat)
+    for (a, b), row in sorted(pairs.items()):
+        n, gain = row["n"], row["gain"]
         if a in pos and b in pos:
+            ink = threat_color(gain) if threat is not None else color
+            hover = f"{players[a]['name']} ↔ {players[b]['name']} · {n} link(s)"
+            if gain is not None:
+                hover += f" · threat gain {gain:+.2f} (grid proxy)"
             fig.add_trace(go.Scatter(
                 x=[pos[a][0], pos[b][0]], y=[pos[a][1], pos[b][1]], mode="lines",
-                line={"color": color, "width": 1 + 3 * min(n, peak) / peak}, opacity=0.35 + 0.5 * min(n, peak) / peak,
-                hovertext=f"{players[a]['name']} ↔ {players[b]['name']} · {n} link(s)", hoverinfo="text"))
+                line={"color": ink, "width": 1 + 4 * min(n, peak) / peak}, opacity=0.4 + 0.5 * min(n, peak) / peak,
+                hovertext=hover, hoverinfo="text"))
+    drawn = [(k, r) for k, r in pairs.items() if k[0] in pos and k[1] in pos]
+    for (a, b), row in sorted(drawn, key=lambda kv: (-kv[1]["n"], kv[0]))[:label_top]:
+        fig.add_annotation(x=(pos[a][0] + pos[b][0]) / 2, y=(pos[a][1] + pos[b][1]) / 2, text=f"<b>{row['n']}</b>",
+                           showarrow=False, font={"size": 10, "color": "#111827"}, bgcolor="rgba(255,255,255,0.85)",
+                           borderpad=1)
     involvement = {pid: 0 for pid in pos}
     for (a, b), n in links.items():
         for pid in (a, b):
             if pid in involvement:
                 involvement[pid] += n
     ids = list(pos)
+    added = {p: (player_threat or {}).get(p, {}).get("added") for p in ids}
     fig.add_trace(go.Scatter(
         x=[pos[p][0] for p in ids], y=[pos[p][1] for p in ids], mode="markers+text",
         text=[players[p]["name"].split()[-1] for p in ids], textposition="bottom center",
         textfont={"color": "white", "size": 9},
         marker={"size": [9 + min(involvement[p], 6) * 1.5 for p in ids], "color": color,
                 "line": {"color": "white", "width": 1.5}},
-        hovertext=[f"{players[p]['name']} · {involvement[p]} links" for p in ids], hoverinfo="text"))
+        hovertext=[f"{players[p]['name']} · {involvement[p]} links"
+                   + (f" · threat added {added[p]:.2f}" if added[p] is not None else "") for p in ids],
+        hoverinfo="text"))
     fig = _base_layout(fig, height=330)
     xs, ys = [x for x, _ in pos.values()], [y for _, y in pos.values()]
     if xs:  # zoom both axes to the area the formation occupies, so the network reads at panel size

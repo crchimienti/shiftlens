@@ -38,3 +38,6 @@ PLAN.md
 
 # R session files
 .Rhistory
+
+# Local-only data folders (never commit)
+data/private_*/

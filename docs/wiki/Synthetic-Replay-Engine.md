@@ -24,7 +24,8 @@ Every metric carries its window, formula version, config version and source even
 - **Match read:** settling / controlled / pressing / building / shifting / chaotic / even, plus who presses,
   who has the ball, who connects better and who gets closer to goal.
 - **Story so far:** goals with who set them up, chances with the goalkeeper who saved them, and the turning point.
-- **Synthetic proxies (Analyst Lens):** Shot Quality Index, Chance Creation Index, Ball Progression and
-  Prevented Danger. These are transparent formulas over the event fields, never called xG, xA or xT.
+- **Synthetic proxies (Analyst Lens):** Shot Quality Index, Chance Creation Index, Ball Progression,
+  Prevented Danger and Zone Threat (a fixed 5 × 3 grid; threat gain = where the next team-mate action happens
+  minus where this one did). These are transparent formulas over the event fields, never called xG, xA or xT.
 
 Every formula and threshold: [docs/methods.md](../methods.md).

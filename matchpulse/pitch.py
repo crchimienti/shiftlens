@@ -10,6 +10,7 @@ import math
 
 from .metrics import _sequence_summary, event_time, event_weight, momentum_at
 from .replay import clock_label
+from .threat import NO_GAIN, THREAT_SCALE, threat_color
 
 # Pitch drawn 0–100 on both axes. The home team attacks left → right in both halves (broadcast
 # convention for the schematic); the away team attacks right → left.
@@ -172,19 +173,26 @@ def _pitch_shapes(tactical: bool = False, simple: bool = False) -> list[dict]:
     return s
 
 
-def _path_shapes(points: list[dict], color: dict) -> tuple[list[dict], list[dict]]:
-    """Curved action paths and one arrowhead annotation per step (deterministic)."""
+def _path_shapes(points: list[dict], color: dict, threat: dict | None = None,
+                 focus: str | None = None) -> tuple[list[dict], list[dict]]:
+    """Curved action paths and one arrowhead annotation per step (deterministic). With `threat`
+    (event_id -> threat move), a path is coloured by the threat gain of the action it starts from; actions
+    without a measured gain (turnovers, shots, saves) keep the team colour. With `focus`, paths that do not
+    touch the focused event are dimmed."""
     shapes, arrows = [], []
     for i, (a, b) in enumerate(zip(points, points[1:])):
         bend, dash, width = PATH_STYLE.get(a["type"], DEFAULT_PATH)
         path, (cx, cy) = _curve(a, b, bend, flip=bool(i % 2) != a["attacks_right"])
-        shapes.append({"type": "path", "path": path, "line": {"color": color[b["team_id"]], "width": width,
-                                                                "dash": dash}, "opacity": 0.9})
+        move = (threat or {}).get(a["event_id"])
+        ink = threat_color(move["gain"]) if move else color[b["team_id"]]
+        opacity = 0.9 if not focus or focus in (a["event_id"], b["event_id"]) else 0.3
+        shapes.append({"type": "path", "path": path, "line": {"color": ink, "width": width + (1 if move else 0),
+                                                                "dash": dash}, "opacity": opacity})
         tx, ty = b["x"] - cx, b["y"] - cy  # tangent at the end of the curve
         norm = math.hypot(tx, ty) or 1.0
         arrows.append({"x": b["x"], "y": b["y"], "ax": b["x"] - tx / norm * 3, "ay": b["y"] - ty / norm * 3,
                        "xref": "x", "yref": "y", "axref": "x", "ayref": "y", "showarrow": True, "arrowhead": 2,
-                       "arrowsize": 1.2, "arrowwidth": width, "arrowcolor": color[b["team_id"]], "text": ""})
+                       "arrowsize": 1.2, "arrowwidth": width, "arrowcolor": ink, "opacity": opacity, "text": ""})
     for p in points:  # a scoring shot goes into the net; a shot off target flies past the post
         gx = 101 if p["attacks_right"] else -1
         if p["type"] == "goal":
@@ -197,17 +205,41 @@ def _path_shapes(points: list[dict], color: dict) -> tuple[list[dict], list[dict
     return shapes, arrows
 
 
+def _swatch(c: str, text: str) -> str:
+    return f"<span style='color:{c}'>■</span> {text}"
+
+
+def _hex(rgb: tuple) -> str:
+    return "#%02x%02x%02x" % rgb
+
+
+THREAT_LEGEND = ("Path colour = threat gain (Zone Threat grid): " + _swatch(NO_GAIN, "none / back") + "  "
+                 + "  ".join(_swatch(_hex(c), f"+{g:.2f}") for g, c in THREAT_SCALE[1:])
+                 + "  · team colour = not measured")
+SYMBOL_LEGEND = "● pass  ◌ carry (dashed)  ◇ dribble  ▲ cross  ▶ shot  ★ goal  ■ save  ⬡ tackle / interception"
+
+
+def _threat_hover(move: dict | None) -> str:
+    if not move:
+        return ""
+    return f"<br>Threat {move['from']:.2f} → {move['to']:.2f} (gain {move['gain']:+.2f}, grid proxy)"
+
+
 def pitch_figure(points: list[dict], home: dict, away: dict, detailed: bool = False,
-                 highlight: str | None = None, palette: dict | None = None):
+                 highlight: str | None = None, palette: dict | None = None, threat: dict | None = None,
+                 underlay: list[dict] | None = None):
     """Schematic pitch with the move as a curved action chain.
 
-    detailed (Analyst Lens): step numbers and the five-lane tactical grid with lane and third labels.
-    Otherwise (Fan Lens): clean pitch, goal emphasis only. `highlight` rings one event (event_id)."""
+    detailed (Analyst Lens): step numbers, the five-lane tactical grid with lane and third labels and a legend.
+    Otherwise (Fan Lens): clean pitch, goal emphasis only. `highlight` rings one event (event_id) and dims the
+    rest. `threat` (event_id -> threat move) colours paths by threat gain; `underlay` adds background cell
+    shapes (e.g. the Zone Threat grid) just above the grass."""
     import plotly.graph_objects as go
 
     color = {home["id"]: HOME_COLOR, away["id"]: AWAY_COLOR}
     pal = {"label": "#64748b", "home_text": HOME_COLOR, "away_text": AWAY_COLOR, **(palette or {})}
-    paths, arrows = _path_shapes(points, color)
+    focus = next((p for p in points if p["event_id"] == highlight), None)
+    paths, arrows = _path_shapes(points, color, threat, focus["event_id"] if focus else None)
     fig = go.Figure()
     for arrow in arrows:
         fig.add_annotation(**arrow)
@@ -229,16 +261,20 @@ def pitch_figure(points: list[dict], home: dict, away: dict, detailed: bool = Fa
             marker={"color": [GOLD if p["type"] == "goal" else color[team["id"]] for p in pts],
                     "size": [SIZES.get(p["type"], 10) for p in pts],
                     "symbol": [SYMBOLS.get(p["type"], "circle") for p in pts],
+                    "opacity": [1.0 if not focus or p is focus else 0.35 for p in pts],
                     "line": {"color": "white", "width": 1.5}},
-            customdata=[[p["step"], p["time"], p["action"], p["outcome"] or "", p["player"], p["event_id"]] for p in pts],
+            customdata=[[p["step"], p["time"], p["action"], p["outcome"] or "", p["player"], p["event_id"],
+                         _threat_hover((threat or {}).get(p["event_id"]))] for p in pts],
             hovertemplate="%{customdata[0]}. %{customdata[1]} · %{customdata[2]} %{customdata[3]}"
-                          "<br>%{customdata[4]} · %{customdata[5]}<extra></extra>",
+                          "<br>%{customdata[4]} · %{customdata[5]}%{customdata[6]}<extra></extra>",
         ))
-    focus = next((p for p in points if p["event_id"] == highlight), None)
     if focus:
         fig.add_trace(go.Scatter(x=[focus["x"]], y=[focus["y"]], mode="markers", name="Selected action",
                                  marker={"size": 34, "color": "rgba(0,0,0,0)", "line": {"color": GOLD, "width": 3}},
                                  hovertemplate=f"Selected: {focus['time']} · {focus['action']}<extra></extra>"))
+        callout = f"{focus['time']} · {focus['action']}" + (f" · {focus['player']}" if focus["player"] else "")
+        fig.add_annotation(x=focus["x"], y=min(focus["y"] + 9, 101), text=f"<b>{callout}</b>", showarrow=False,
+                           font={"size": 11, "color": "#111827"}, bgcolor="rgba(250,204,21,0.92)", borderpad=3)
     if detailed:
         for (lo, hi), name in zip(zip(FIVE_LANES, FIVE_LANES[1:]), FIVE_LANE_NAMES):
             fig.add_annotation(x=101.5, y=(lo + hi) / 2, text=name, showarrow=False, textangle=90,
@@ -246,13 +282,22 @@ def pitch_figure(points: list[dict], home: dict, away: dict, detailed: bool = Fa
         for x, name in ((16.7, "Defensive third"), (50, "Middle third"), (83.3, "Final third")):
             fig.add_annotation(x=x, y=-3, text=f"{name} ({home['id']})", showarrow=False,
                                font={"size": 8, "color": pal["label"]})
+        legend = [THREAT_LEGEND, SYMBOL_LEGEND] if threat is not None else [SYMBOL_LEGEND]
+        for i, text in enumerate(legend):
+            fig.add_annotation(x=0, y=-8 - 5 * i, text=text, showarrow=False, xanchor="left",
+                               font={"size": 9, "color": pal["label"]})
     fig.add_annotation(x=99, y=105, text=f"{home['name']} attack →", showarrow=False, xanchor="right",
                        font={"color": pal["home_text"], "size": 11})
     fig.add_annotation(x=1, y=105, text=f"← {away['name']} attack", showarrow=False, xanchor="left",
                        font={"color": pal["away_text"], "size": 11})
-    fig.update_layout(shapes=_pitch_shapes(tactical=detailed, simple=not detailed) + paths, height=380, margin={"l": 4, "r": 4, "t": 18, "b": 4},
+    markings = _pitch_shapes(tactical=detailed, simple=not detailed)
+    bottom = (-11 - 5 * (threat is not None)) if detailed else -6
+    grass = [s for s in markings if s.get("layer") == "below"]  # pitch + stripes, then the underlay, then lines
+    lines = [s for s in markings if s.get("layer") != "below"]
+    fig.update_layout(shapes=grass + list(underlay or []) + lines + paths,
+                      height=380 + (40 if detailed else 0), margin={"l": 4, "r": 4, "t": 18, "b": 4},
                       xaxis={"range": [-3, 103], "visible": False, "fixedrange": True},
-                      yaxis={"range": [-6, 109], "visible": False, "fixedrange": True, "scaleanchor": "x",
+                      yaxis={"range": [bottom, 109], "visible": False, "fixedrange": True, "scaleanchor": "x",
                              "scaleratio": 0.68},
                       showlegend=False, plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)")
     return fig

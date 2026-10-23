@@ -38,7 +38,7 @@ cite the metrics and events behind each claim, and are rejected if they don't ch
 | **For** | fans, viewers, presenters | analysts, coaches, scouts, studio producers |
 | **First on screen** | the key move on the pitch, compact stats, pressure | tactical workspace and proxy leaders |
 | **Story** | Match Story (who presses, has the ball, connects, threatens; how the game evolved) and Live Story (explains each paused moment) | tactical read with a coaching takeaway, plus a key-moments log |
-| **Visuals** | clean pitch, goal emphasis, lineups one tab away | five-lane tactical board, activity map (team or player), pass network, shot map, defensive actions |
+| **Visuals** | clean pitch, goal emphasis, lineups one tab away | five-lane tactical board with threat-coloured paths, activity map (team or player), threat-coloured pass network, shot map, defensive actions |
 | **Evidence** | one click away | summary first, full evidence table on demand |
 
 ## Architecture
@@ -48,7 +48,7 @@ synthetic match JSON ──► validator (schema + rules + fingerprint)
         ▼
 ReplayState (play / pause / seek / speed) ──► Replay.snapshot(t) = 8 deterministic metrics at second t
         │
-        ├──► story & proxies (match read, key moments, shot quality, chance creation, progression)
+        ├──► story & proxies (match read, key moments, shot quality, chance creation, progression, zone threat)
         ├──► explanation layer: request → deterministic fallback (default) or optional model
         │        → strict schema + grounding validator → one retry → fallback → cache
         └──► Streamlit UI: Fan Lens / Analyst Lens, pitch, tide, lineups, traceability
@@ -107,7 +107,7 @@ The Python package and `MATCHPULSE_*` environment variables keep the project's o
 ```bash
 .venv\Scripts\python -m pytest
 ```
-269 tests cover:
+283 tests cover:
 - **Data:** dataset rules, determinism and the fingerprint.
 - **Metrics and proxies:** every metric and the synthetic proxies.
 - **Replay:** speed and state handling.

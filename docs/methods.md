@@ -162,7 +162,9 @@ none of them is xG, xA or xT. Code: `matchpulse/analytics.py`.
 - **Shot map (schematic).** Shots at schematic positions (fixed offsets within a cell); marker size = SQI,
   symbol = outcome. These are not real shot locations.
 - **Pass network (schematic).** A link is a pass, cross, corner or free kick followed by a team-mate's next
-  action in the same move. Players are drawn at their *formation slots* (see Lineups), not at average positions.
+  action in the same move. Players are drawn at the *average of their zone × lane cells* (default) or at their
+  *formation slots* (see Lineups), never at measured positions. Line width = number of links; line colour = the
+  summed threat gain moved along the link (Zone Threat, below); the three busiest links show their count.
 - **Lineup badges.** ⚽ goals, 🅰️ assists (as above), 🟨 🟥 cards if the data has card events (schema 1.0.0 has
   none), all from the event chain up to the current second.
 
@@ -199,8 +201,31 @@ the snapshot and passes the unchanged validator; "suggests" marks interpretation
 ## Ball Progression (proxy)
 A pass, carry, dribble or cross counts as progressive when the same team's next action in the same move is in a
 more advanced zone (own box → defensive third → middle third → attacking third → opponent box). It is a count,
-not a threat value. An xT-style grid was considered and **rejected**: with five zones and three lanes, a threat
-grid would add false precision.
+not a threat value.
+
+## Zone Threat and threat gain (proxy)
+Code: `matchpulse/threat.py` (version 1.0). Display-only: it never feeds the 8 core metrics, the explanation
+request or the validator.
+- **Zone Threat grid.** A fixed, hand-set 0–1 value per zone × lane cell, as seen by the acting team:
+
+  | Zone | Left | Centre | Right |
+  |---|---|---|---|
+  | own box | 0.01 | 0.01 | 0.01 |
+  | defensive third | 0.02 | 0.03 | 0.02 |
+  | middle third | 0.05 | 0.07 | 0.05 |
+  | attacking third | 0.10 | 0.16 | 0.10 |
+  | opponent box | 0.24 | 0.40 | 0.24 |
+
+- **Threat gain** of a pass, cross, corner, free kick, carry or dribble = grid value of the cell where the same
+  team's *very next* action in the same move happens − grid value of the action's own cell. Turnovers, shots,
+  saves and the last action of a move get no value (no destination to measure).
+- **Threat Added** (Proxy leaders) = a player's sum of positive gains. **Move threat** = net gain of the move's
+  actions plus the most dangerous cell it reached.
+- **Honest limits.** The grid is not learned from data and is **not xT** or a probability: it only ranks cells
+  (closer to goal and more central = higher). With 15 cells the values are coarse, so they are used to colour
+  paths and rank actions, not to claim precise threat. An earlier version of this document rejected a grid for
+  that false-precision risk; it was added once it could be shown as a published, fixed ranking with these
+  limits stated next to it.
 
 ## Explanation contract
 
