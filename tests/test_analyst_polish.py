@@ -136,3 +136,62 @@ def test_metric_grid_keeps_card_width_when_cards_are_hidden():
     from matchpulse import ui
 
     assert "repeat(auto-fill, minmax(150px, 1fr))" in ui.CSS  # empty tracks stay; cards never stretch
+
+
+# --- final UX: logo slot, KPI order, opt-in goal chime --------------------------------------------
+
+def _grid_order(at):
+    import re
+
+    grid = next(m.value for m in at.markdown if 'class="sl-kpi-grid"' in m.value)
+    return [re.sub(r"^\W+", "", lbl).split(" · ")[0].strip() for lbl in re.findall(r'<div class="lbl">([^<]+)', grid)]
+
+
+def test_logo_has_its_own_slot_apart_from_the_teams():
+    at = AppTest.from_file(str(ROOT / "streamlit_app.py"), default_timeout=30)
+    at.run()
+    mark = next(m.value for m in at.markdown if 'class="sl-brandmark"' in m.value)
+    score = next(m.value for m in at.markdown if 'class="sl-score"' in m.value)
+    assert "sl-crop" in mark and "sl-crop" not in score and "height:36px" in mark
+
+
+def test_analyst_can_reorder_kpi_cards_and_reset():
+    at = AppTest.from_file(str(ROOT / "streamlit_app.py"), default_timeout=30)
+    at.run()
+    at.radio(key="mode").set_value("Analyst").run()
+    default = _grid_order(at)
+    assert default == ["Pressure", "Pass share", "Danger index", "Territory", "Shot Quality", "Turning point"]
+    at.button(key="kpi_up_turning").click().run()  # one step left: swaps with Shot Quality
+    assert _grid_order(at)[-2:] == ["Turning point", "Shot Quality"]
+    at.button(key="kpi_down_pressure").click().run()
+    assert _grid_order(at)[:2] == ["Pass share", "Pressure"]
+    at.checkbox(key="kpi_pass_share").uncheck().run()  # hide/show still works with a custom order
+    assert _grid_order(at)[0] == "Pressure" and "Pass share" not in _grid_order(at)
+    assert at.button(key="kpi_up_pressure").disabled is False and at.button(key="kpi_up_pass_share").disabled
+    at.button(key="kpi_reset_order").click().run()
+    assert _grid_order(at) == [x for x in default if x != "Pass share"] and not at.exception
+
+
+def test_goal_chime_is_a_short_valid_wav():
+    import io
+    import wave
+
+    from matchpulse.ui import goal_chime_wav
+
+    with wave.open(io.BytesIO(goal_chime_wav())) as w:
+        assert (w.getnchannels(), w.getsampwidth()) == (1, 2) and 0.5 < w.getnframes() / w.getframerate() < 1.0
+
+
+def test_goal_chime_plays_once_only_when_switched_on():
+    at = AppTest.from_file(str(ROOT / "streamlit_app.py"), default_timeout=30)
+    at.run()
+    assert at.toggle(key="goal_sound").value is False
+    next(b for b in at.button if b.label.startswith("Goal moment")).click().run()
+    assert not at.get("audio")  # off by default: silent
+    at.button(key="Reset").click().run() if any(b.key == "Reset" for b in at.button) else \
+        next(b for b in at.button if b.label == "Reset").click().run()
+    at.toggle(key="goal_sound").set_value(True).run()
+    next(b for b in at.button if b.label.startswith("Goal moment")).click().run()
+    assert len(at.get("audio")) == 1  # goals 0 -> 3: one chime
+    at.radio(key="mode").set_value("Analyst").run()
+    assert not at.get("audio") and not at.exception  # no new goal on the next run: no repeat

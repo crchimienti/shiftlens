@@ -50,6 +50,11 @@ def _in_streamlit() -> bool:
 
 
 if _in_streamlit():
+    # Import pandas fully before any Plotly figure is built. Plotly checks for pandas via sys.modules without
+    # waiting for an import in progress, so a rerun that starts while an earlier script run is still importing
+    # pandas (cold start) would see a half-initialised module and crash. A plain import waits for it instead.
+    import pandas  # noqa: F401
+
     from matchpulse.ui import render
 
     render(dataset_path())

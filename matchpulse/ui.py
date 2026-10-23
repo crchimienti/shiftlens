@@ -153,6 +153,9 @@ h1 { position: absolute !important; width: 1px; height: 1px; overflow: hidden; c
 .st-key-control_bar .sl-score .goals { animation: sl-goals linear both; animation-timeline: --sl-page; animation-range: 0 180px; }
 @keyframes sl-goals { to { font-size: 1.3rem; } }
 .sl-score { display: flex; align-items: center; justify-content: center; gap: 0.7rem; }
+/* Product mark: its own slot with a divider, so it never reads as one team's crest. It does not shrink on scroll. */
+.sl-brandmark { display: flex; align-items: center; justify-content: center; padding-right: 0.7rem;
+  border-right: 1px solid var(--sl-border); min-height: 2.6rem; }
 .sl-score .team { font-weight: 700; font-size: 1.0rem; }
 .sl-score .home { color: var(--sl-home); } .sl-score .away { color: var(--sl-away); }
 .sl-score .goals { font-size: 1.7rem; font-weight: 800; letter-spacing: 0.05em; color: var(--sl-text); }
@@ -171,6 +174,7 @@ h1 { position: absolute !important; width: 1px; height: 1px; overflow: hidden; c
 .sl-kpi-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 0.5rem;
   margin-bottom: 1rem; }  /* auto-fill keeps empty tracks, so hidden cards never stretch the rest */
 .sl-kpi-grid .sl-kpi { height: 66px; }
+.st-key-goal_chime { display: none; }
 .sl-panel-title { font-weight: 700; font-size: 0.95rem; color: var(--sl-text); margin-bottom: 0.2rem; }
 .sl-panel-title .acc { color: var(--sl-accent); font-weight: 500; font-size: 0.8rem; }
 table.sl-stats { width: 100%%; border-collapse: collapse; font-size: 0.88rem; color: var(--sl-text); }
@@ -214,7 +218,9 @@ table.sl-stats th.home { color: var(--sl-home); } table.sl-stats th.away { color
   .st-key-control_bar { padding: 0.3rem 0.5rem; border-left-width: 4px; }
   .st-key-control_bar [data-testid="stHorizontalBlock"] { flex-wrap: wrap; flex-direction: row; gap: 0.35rem; }
   .st-key-control_bar [data-testid="stColumn"] { min-width: 0 !important; width: auto !important; flex: 1 1 28%% !important; }
-  .st-key-control_bar [data-testid="stColumn"]:first-child { flex-basis: 100%% !important; }
+  .st-key-control_bar [data-testid="stColumn"]:first-child { flex: 0 0 auto !important; }
+  .st-key-control_bar [data-testid="stColumn"]:nth-child(2) { flex: 1 1 70%% !important; }
+  .sl-brandmark { padding-right: 0.45rem; min-height: 2.2rem; }
   .st-key-control_bar button { min-height: 2.6rem; }
   .sl-score { gap: 0.45rem; } .sl-score .team { font-size: 0.9rem; } .sl-score .goals { font-size: 1.4rem; }
   .sl-clock { margin-top: 0; }
@@ -374,6 +380,29 @@ def render_display_controls() -> None:
         st.caption("Overlay density only. Positions stay schematic (zone × lane), never tracking.")
 
 
+@st.cache_resource
+def goal_chime_wav() -> bytes:
+    """A 0.7 s two-note chime generated in code (no asset file, no network): 16-bit mono WAV, gentle fade."""
+    import io
+    import math
+    import struct
+    import wave
+
+    rate, notes, out = 22050, ((880.0, 0.18), (1318.5, 0.5)), bytearray()
+    for freq, length in notes:
+        n = int(rate * length)
+        for i in range(n):
+            env = min(1.0, i / (0.01 * rate)) * (1 - i / n) ** 2  # quick attack, soft decay
+            out += struct.pack("<h", int(0.32 * 32767 * env * math.sin(2 * math.pi * freq * i / rate)))
+    buf = io.BytesIO()
+    with wave.open(buf, "wb") as w:
+        w.setnchannels(1)
+        w.setsampwidth(2)
+        w.setframerate(rate)
+        w.writeframes(bytes(out))
+    return buf.getvalue()
+
+
 def _notes() -> list[dict]:
     return st.session_state.setdefault("notes", [])
 
@@ -527,7 +556,7 @@ def render_banner(theme: str, analyst: bool) -> None:
         f'<span class="step" title="{escape(tip)}"><b>{i}</b> {name}</span>'
         for i, (name, tip) in enumerate(VALUE_CHAIN, 1))
     with st.container(key="brand_row"):
-        c_brand, c_speed, c_lens = st.columns([4.6, 1.5, 1.6], vertical_alignment="center")
+        c_brand, c_speed, c_lens, c_sound = st.columns([4.4, 1.5, 1.6, 0.9], vertical_alignment="center")
         c_brand.markdown(
             f'<div class="sl-banner"><div>{_crop("lockup_dark" if theme == "dark" else "lockup_light", 48)}</div>'
             f'<div style="text-align:right"><div><span class="sl-chip lens">{lens}</span>'
@@ -541,6 +570,9 @@ def render_banner(theme: str, analyst: bool) -> None:
         c_lens.radio("Lens", ["Fan", "Analyst"], key="mode", horizontal=True, format_func=lambda m: f"{m} Lens",
                      help="Fan Lens: a broadcaster companion. Analyst Lens: a tactical desk with references, "
                           "move breakdowns, proxy analytics and full traceability.")
+        c_sound.toggle("🔔 Goal", key="goal_sound", value=False,
+                       help="Play a short chime when a goal happens in the replay. Off by default; some browsers "
+                            "only allow sound after you have clicked on the page.")
 
 
 def render_control_bar(replay: Replay, snap: dict, state, analyst: bool, theme: str) -> None:
@@ -552,9 +584,11 @@ def render_control_bar(replay: Replay, snap: dict, state, analyst: bool, theme: 
     half = "1st half" if snap["period"] == 1 else "2nd half"
     status = "▶ Playing" if state.playing else ("🏁 Full time" if state.clock >= state.duration else "⏸ Paused")
     with st.container(key="control_bar"):
-        c_score, c_play, c_pause, c_reset = st.columns([4.2, 1, 1, 1], vertical_alignment="center")
+        c_logo, c_score, c_play, c_pause, c_reset = st.columns([0.75, 3.6, 1, 1, 1], vertical_alignment="center")
+        c_logo.markdown(f'<div class="sl-brandmark" title="ShiftLens">'
+                        f'{_crop("icon_dark" if theme == "dark" else "icon_light", 36)}</div>', unsafe_allow_html=True)
         c_score.markdown(
-            f'<div class="sl-score">{_crop("icon_dark" if theme == "dark" else "icon_light", 30)}'
+            f'<div class="sl-score">'
             f'<span class="team home">{escape(home["name"])}</span>'
             f'<span class="goals">{score[home["id"]]} – {score[away["id"]]}</span>'
             f'<span class="team away">{escape(away["name"])}</span></div>'
@@ -588,12 +622,40 @@ def _kpi_visible(key: str) -> bool:
     return st.session_state.get(f"kpi_{key}", key in ANALYST_KPI_DEFAULT)
 
 
+def _kpi_order() -> list[str]:
+    """Analyst card order (session). Unknown or missing keys fall back to the default order."""
+    order = [k for k in st.session_state.get("kpi_order", []) if k in KPI_LABELS]
+    return order + [k for k in KPI_LABELS if k not in order]
+
+
+def on_kpi_move(key: str, step: int) -> None:
+    order = _kpi_order()
+    i = order.index(key)
+    j = i + step
+    if 0 <= j < len(order):
+        order[i], order[j] = order[j], order[i]
+    st.session_state["kpi_order"] = order
+
+
+def on_kpi_reset_order() -> None:
+    st.session_state.pop("kpi_order", None)
+
+
 def render_kpi_menu() -> None:
     """Analyst: one small popover to show or hide each metric card (visibility only, no reordering)."""
     shown = sum(_kpi_visible(k) for k in KPI_LABELS)
+    order = _kpi_order()
     with st.popover(f"Metrics {shown}/{len(KPI_LABELS)}", icon=":material/view_column:", width="stretch"):
-        for key, label in KPI_LABELS.items():
-            st.checkbox(label, value=key in ANALYST_KPI_DEFAULT, key=f"kpi_{key}")
+        st.caption("Show or hide a card; ↑ ↓ change its place in the strip.")
+        for i, key in enumerate(order):
+            c_box, c_up, c_down = st.columns([4, 1, 1], vertical_alignment="center")
+            c_box.checkbox(KPI_LABELS[key], value=key in ANALYST_KPI_DEFAULT, key=f"kpi_{key}")
+            c_up.button("↑", key=f"kpi_up_{key}", on_click=on_kpi_move, args=(key, -1), disabled=i == 0,
+                        help=f"Move {KPI_LABELS[key]} left")
+            c_down.button("↓", key=f"kpi_down_{key}", on_click=on_kpi_move, args=(key, 1),
+                          disabled=i == len(order) - 1, help=f"Move {KPI_LABELS[key]} right")
+        st.button("Reset order", key="kpi_reset_order", on_click=on_kpi_reset_order, width="stretch",
+                  disabled="kpi_order" not in st.session_state)
         st.caption("Hidden cards only leave the strip; the metrics still drive the explanation and traceability.")
 
 
@@ -604,7 +666,7 @@ def render_kpis(replay: Replay, snap: dict, analyst: bool) -> None:
     if not analyst:
         st.markdown(f'<div class="sl-kpi-stack">{"".join(cards.values())}</div>', unsafe_allow_html=True)
         return
-    visible = [html for key, html in cards.items() if _kpi_visible(key)]
+    visible = [cards[key] for key in _kpi_order() if key in cards and _kpi_visible(key)]
     if visible:
         st.markdown(f'<div class="sl-kpi-grid">{"".join(visible)}</div>', unsafe_allow_html=True)
     else:
@@ -1219,6 +1281,9 @@ def render(dataset_path: str) -> None:
         st.session_state["replay_state"] = replay.new_state()
     state = _state()
     snap = replay.snapshot(state.clock)
+    goals_now = sum(1 for ev in snap["events"] if ev["type"] == "goal")
+    goals_seen = st.session_state.get("_goals_seen")
+    st.session_state["_goals_seen"] = goals_now
 
     # 1. Brand, match state and controls (sticky), headline cards
     render_banner(theme, analyst)
@@ -1274,6 +1339,9 @@ def render(dataset_path: str) -> None:
                 render_match_story(replay, snap, "📰 Match Story", 4, "Key moments")
             with st.container(border=True):
                 render_explanation(replay, snap, state)
+    if st.session_state.get("goal_sound") and goals_seen is not None and goals_now > goals_seen:
+        with st.container(key="goal_chime"):  # hidden player; rendered only in the run where a goal appears
+            st.audio(goal_chime_wav(), format="audio/wav", autoplay=True)
     # 4. Evidence
     render_timeline(replay, snap, analyst)
     render_traceability(replay, snap)
