@@ -113,6 +113,8 @@ def momentum_trend(match: dict, config: dict, at: int, step: int = 30) -> list[t
 
 HOME_COLOR, AWAY_COLOR = "#2563eb", "#ea580c"
 LINE_COLOR, GRASS, GRASS_STRIPE = "rgba(255,255,255,0.85)", "#2f7d4a", "#2a7343"
+# Analyst map boards: a darker pitch with crisper lines on a deep card, so overlays read in light and dark themes.
+MAP_CARD, MAP_GRASS, MAP_STRIPE, MAP_LINE = "#0f2419", "#256a3d", "#215f37", "rgba(255,255,255,0.95)"
 GOLD = "#facc15"
 SYMBOLS = {"pass": "circle", "carry": "circle-open", "dribble": "diamond-open", "cross": "triangle-up",
            "shot": "triangle-right", "goal": "star", "save": "square", "corner": "diamond", "free_kick": "diamond",
@@ -142,13 +144,15 @@ FIVE_LANES = (0, 21, 37, 63, 79, 100)
 FIVE_LANE_NAMES = ("Wing", "Half-space", "Centre", "Half-space", "Wing")
 
 
-def _pitch_shapes(tactical: bool = False, simple: bool = False) -> list[dict]:
-    """Pitch markings. `simple` drops the guide lines (Fan Lens); `tactical` draws the five-lane grid."""
-    line = {"color": LINE_COLOR, "width": 1.5}
-    faint = {"color": "rgba(255,255,255,0.3)", "width": 1, "dash": "dot"}
-    s = [{"type": "rect", "x0": 0, "y0": 0, "x1": 100, "y1": 100, "line": line, "fillcolor": GRASS, "layer": "below"}]
+def _pitch_shapes(tactical: bool = False, simple: bool = False, strong: bool = False) -> list[dict]:
+    """Pitch markings. `simple` drops the guide lines; `tactical` draws the five-lane grid; `strong` is the
+    higher-contrast map-board pitch (darker grass, crisper lines)."""
+    grass, stripe = (MAP_GRASS, MAP_STRIPE) if strong else (GRASS, GRASS_STRIPE)
+    line = {"color": MAP_LINE if strong else LINE_COLOR, "width": 1.8 if strong else 1.5}
+    faint = {"color": "rgba(255,255,255,0.45)" if strong else "rgba(255,255,255,0.3)", "width": 1, "dash": "dot"}
+    s = [{"type": "rect", "x0": 0, "y0": 0, "x1": 100, "y1": 100, "line": line, "fillcolor": grass, "layer": "below"}]
     s += [{"type": "rect", "x0": x, "y0": 0, "x1": x + 10, "y1": 100, "line": {"width": 0},
-           "fillcolor": GRASS_STRIPE, "layer": "below"} for x in range(0, 100, 20)]
+           "fillcolor": stripe, "layer": "below"} for x in range(0, 100, 20)]
     s += [
         {"type": "line", "x0": 50, "y0": 0, "x1": 50, "y1": 100, "line": line},
         {"type": "circle", "x0": 41, "y0": 37, "x1": 59, "y1": 63, "line": line},
@@ -258,14 +262,16 @@ def _attack_layer(attack: dict) -> tuple[list[dict], list[dict]]:
 def pitch_figure(points: list[dict], home: dict, away: dict, detailed: bool = False,
                  highlight: str | None = None, palette: dict | None = None, threat: dict | None = None,
                  underlay: list[dict] | None = None, cell_labels: list[dict] | None = None,
-                 attack: dict | None = None):
+                 attack: dict | None = None, guides: bool = True, names: bool = False):
     """Schematic pitch with the move as a curved action chain.
 
     detailed (Analyst Lens): step numbers, the five-lane tactical grid with lane and third labels and a legend.
     Otherwise (Fan Lens): clean pitch, goal emphasis only. `highlight` rings one event (event_id) and dims the
     rest. `threat` (event_id -> threat move) colours paths by threat gain; `underlay` adds background cell
     shapes (e.g. the Zone Threat danger map) just above the grass and `cell_labels` prints their values.
-    `attack` ({"team", "target", "right", "color"}) draws the attack direction and the target goal."""
+    `attack` ({"team", "target", "right", "color"}) draws the attack direction and the target goal.
+    Analyst display options: `guides` (five-lane grid, lane and third labels) and `names` (surname next to each
+    step number)."""
     import plotly.graph_objects as go
 
     color = {home["id"]: HOME_COLOR, away["id"]: AWAY_COLOR}
@@ -284,8 +290,9 @@ def pitch_figure(points: list[dict], home: dict, away: dict, detailed: bool = Fa
         pts = [p for p in points if p["team_id"] == team["id"]]
         if not pts:
             continue
-        labels = [str(p["step"]) if detailed else
-                  (f"⚽ {p['player'].split()[-1]}" if p["type"] == "goal" and p["player"] else "") for p in pts]
+        labels = [(f"{p['step']} {p['player'].split()[-1]}" if names and p["player"] else str(p["step"]))
+                  if detailed else (f"⚽ {p['player'].split()[-1]}" if p["type"] == "goal" and p["player"] else "")
+                  for p in pts]
         fig.add_trace(go.Scatter(
             x=[p["x"] for p in pts], y=[p["y"] for p in pts], mode="markers+text",
             name=team["name"], text=labels, textposition="top center",
@@ -307,13 +314,14 @@ def pitch_figure(points: list[dict], home: dict, away: dict, detailed: bool = Fa
         callout = f"{focus['time']} · {focus['action']}" + (f" · {focus['player']}" if focus["player"] else "")
         fig.add_annotation(x=focus["x"], y=min(focus["y"] + 9, 101), text=f"<b>{callout}</b>", showarrow=False,
                            font={"size": 11, "color": "#111827"}, bgcolor="rgba(250,204,21,0.92)", borderpad=3)
-    if detailed:
+    if detailed and guides:
         for (lo, hi), name in zip(zip(FIVE_LANES, FIVE_LANES[1:]), FIVE_LANE_NAMES):
             fig.add_annotation(x=101.5, y=(lo + hi) / 2, text=name, showarrow=False, textangle=90,
                                font={"size": 8, "color": pal["label"]})
         for x, name in ((16.7, "Defensive third"), (50, "Middle third"), (83.3, "Final third")):
             fig.add_annotation(x=x, y=-3, text=f"{name} ({home['id']})", showarrow=False,
                                font={"size": 8, "color": pal["label"]})
+    if detailed:
         view_legend = THREAT_LEGEND if threat is not None else DANGER_LEGEND if cell_labels else None
         legend = [view_legend, SYMBOL_LEGEND] if view_legend else [SYMBOL_LEGEND]
         for i, text in enumerate(legend):
@@ -332,12 +340,12 @@ def pitch_figure(points: list[dict], home: dict, away: dict, detailed: bool = Fa
                            font={"color": pal["home_text"], "size": 11})
         fig.add_annotation(x=1, y=105, text=f"← {away['name']} attack", showarrow=False, xanchor="left",
                            font={"color": pal["away_text"], "size": 11})
-    markings = _pitch_shapes(tactical=detailed, simple=not detailed)
+    markings = _pitch_shapes(tactical=detailed and guides, simple=not (detailed and guides))
     bottom = (-11 - 5 * (threat is not None or bool(cell_labels))) if detailed else -6
     grass = [s for s in markings if s.get("layer") == "below"]  # pitch + stripes, then the underlay, then lines
     lines = [s for s in markings if s.get("layer") != "below"]
     fig.update_layout(shapes=grass + list(underlay or []) + lines + attack_shapes + paths,
-                      height=470 if detailed else 380, margin={"l": 4, "r": 4, "t": 18, "b": 4},
+                      height=430 if detailed else 350, margin={"l": 4, "r": 4, "t": 18, "b": 4},
                       xaxis={"range": [-6, 106] if attack else [-3, 103], "visible": False, "fixedrange": True},
                       yaxis={"range": [bottom, 109], "visible": False, "fixedrange": True, "scaleanchor": "x",
                              "scaleratio": 0.68},

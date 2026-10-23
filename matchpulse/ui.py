@@ -121,21 +121,31 @@ CSS = """
 :root { --sl-accent: %(accent)s; --sl-home: %(home)s; --sl-away: %(away)s; --sl-text: %(text)s; --sl-muted: %(muted)s;
   --sl-card: %(card)s; --sl-border: %(border)s; --sl-bar: %(bar)s; --sl-banner: %(banner)s; --sl-row: %(row)s;
   --sl-shadow: %(shadow)s; }
-[data-testid="stMain"] { scroll-timeline: --sl-page block; }
-[data-testid="stMainBlockContainer"] { padding-top: 2.2rem; padding-bottom: 2rem; }
+/* scroll-padding keeps anything scrolled into view below the header + compact sticky bar */
+[data-testid="stMain"] { scroll-timeline: --sl-page block; scroll-padding-top: 8.5rem; }
+/* Top padding clears Streamlit's own fixed header (3.75rem), so nothing starts underneath it. */
+[data-testid="stMainBlockContainer"] { padding-top: 4.2rem; padding-bottom: 1.5rem; }
+[data-testid="stMainBlockContainer"] [data-testid="stVerticalBlock"] { gap: 0.6rem; }
 h1 { position: absolute !important; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
 .sl-crop { display: inline-block; background-repeat: no-repeat; vertical-align: middle; }
-.sl-banner { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 0.5rem 1rem;
+.sl-banner { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 0.3rem 0.9rem;
   border-radius: 0.9rem; background: var(--sl-banner); border: 1px solid var(--sl-border); box-shadow: var(--sl-shadow); }
 .sl-banner .tag { color: var(--sl-muted); font-size: 0.82rem; }
 .sl-chip { display: inline-block; padding: 0.15rem 0.6rem; margin-left: 0.35rem; border-radius: 999px; font-size: 0.74rem;
   border: 1px solid var(--sl-border); color: var(--sl-text); background: var(--sl-row); white-space: nowrap; }
 .sl-chip.lens { border-color: var(--sl-accent); color: var(--sl-accent); font-weight: 700; }
+/* Sticky essentials only (score, clock, half, play state, lens; play / pause / reset). Sticky, not fixed: it keeps
+   its place in the flow, so nothing starts underneath it. Its small size is structural (no animation needed); the
+   scroll-driven compaction below is an optional enhancement where the browser supports it. */
 [data-testid="stLayoutWrapper"]:has(> .st-key-control_bar) { position: sticky; top: 3.75rem; z-index: 990; }
 .st-key-control_bar { background: var(--sl-bar); border: 1px solid var(--sl-border); border-left: 6px solid var(--sl-accent);
-  border-radius: 0.8rem; padding: 0.4rem 0.8rem 0.1rem; box-shadow: var(--sl-shadow); backdrop-filter: blur(6px);
-  animation: sl-compact linear both; animation-timeline: --sl-page; animation-range: 0 180px; }
-@keyframes sl-compact { to { padding-top: 0.12rem; padding-bottom: 0; } }
+  border-radius: 0.8rem; padding: 0.35rem 0.8rem 0.3rem; box-shadow: var(--sl-shadow); backdrop-filter: blur(6px);
+  animation: sl-compact linear both; animation-timeline: --sl-page; animation-range: 0 160px; }
+@keyframes sl-compact { to { padding-top: 0.1rem; padding-bottom: 0.1rem; } }
+.st-key-control_bar button { min-height: 2.25rem; }
+.st-key-control_bar [data-testid="stMarkdownContainer"] { margin-bottom: 0 !important; }  /* keep the clock inside */
+.st-key-clock_strip { padding: 0 0.8rem; margin-top: -0.25rem; }
+.st-key-brand_row [data-testid="stWidgetLabel"] { margin-bottom: -0.25rem; }
 .st-key-control_bar [data-testid="stWidgetLabel"], .st-key-control_bar .sl-clock .extra {
   max-height: 2rem; overflow: hidden;
   animation: sl-hide linear both; animation-timeline: --sl-page; animation-range: 0 180px; }
@@ -148,13 +158,19 @@ h1 { position: absolute !important; width: 1px; height: 1px; overflow: hidden; c
 .sl-score .goals { font-size: 1.7rem; font-weight: 800; letter-spacing: 0.05em; color: var(--sl-text); }
 .sl-clock { text-align: center; font-size: 0.78rem; color: var(--sl-muted); margin-top: -0.2rem; }
 .sl-kpi { border: 1px solid var(--sl-border); border-top: 3px solid var(--sl-accent); border-radius: 0.7rem;
-  padding: 0.4rem 0.7rem; height: 84px; display: flex; flex-direction: column; justify-content: space-between;
+  padding: 0.35rem 0.7rem; height: 72px; display: flex; flex-direction: column; justify-content: space-between;
   background: var(--sl-card); overflow: hidden; box-shadow: var(--sl-shadow); }
 .sl-kpi .lbl { font-size: 0.72rem; color: var(--sl-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .sl-kpi .lbl span { cursor: help; opacity: 0.7; }
 .sl-kpi .val { font-size: 1.18rem; font-weight: 700; line-height: 1.1; color: var(--sl-text); }
-.sl-kpi .val.small { font-size: 0.96rem; }
+.sl-kpi .val.small { font-size: 0.92rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .sl-kpi .sub { font-size: 0.66rem; color: var(--sl-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* Metric layouts. margin-bottom cancels Streamlit's -1rem pull on HTML blocks so cards never touch what follows. */
+.sl-kpi-stack { display: flex; flex-direction: column; gap: 0.45rem; margin-bottom: 1rem; }
+.sl-kpi-stack .sl-kpi { height: auto; min-height: 60px; gap: 0.1rem; }
+.sl-kpi-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 0.5rem;
+  margin-bottom: 1rem; }  /* auto-fill keeps empty tracks, so hidden cards never stretch the rest */
+.sl-kpi-grid .sl-kpi { height: 66px; }
 .sl-panel-title { font-weight: 700; font-size: 0.95rem; color: var(--sl-text); margin-bottom: 0.2rem; }
 .sl-panel-title .acc { color: var(--sl-accent); font-weight: 500; font-size: 0.8rem; }
 table.sl-stats { width: 100%%; border-collapse: collapse; font-size: 0.88rem; color: var(--sl-text); }
@@ -173,6 +189,47 @@ table.sl-stats th.home { color: var(--sl-home); } table.sl-stats th.away { color
 .sl-read { border-left: 3px solid var(--sl-accent); padding: 0.35rem 0.6rem; margin-bottom: 0.35rem; background: var(--sl-row);
   border-radius: 0.4rem; color: var(--sl-text); font-size: 0.9rem; }
 .sl-read ul { margin: 0.25rem 0 0 1rem; padding: 0; font-size: 0.84rem; }
+[data-testid="stTabs"] [data-baseweb="tab-list"] { gap: 0.6rem; }
+/* Analyst move controls: one dominant picker, a quieter secondary row */
+.st-key-move_primary [data-testid="stWidgetLabel"] p { font-weight: 700; font-size: 0.86rem; color: var(--sl-text); }
+.st-key-move_primary button { min-height: 2.4rem; font-weight: 600; }
+.st-key-move_secondary [data-testid="stWidgetLabel"] p { font-size: 0.7rem; color: var(--sl-muted);
+  text-transform: uppercase; letter-spacing: 0.04em; }
+.st-key-move_secondary button, .st-key-move_secondary [data-baseweb="select"] { font-size: 0.8rem; min-height: 2rem; }
+.st-key-move_secondary { margin-top: -0.2rem; }
+/* map boards (dark pitch cards) get rounded corners like the panels around them */
+[data-testid="stPlotlyChart"] .bglayer rect { rx: 8px; }
+[data-testid="stTabs"] [data-baseweb="tab-panel"] { padding-top: 0.5rem; }
+
+/* Phones: one column, story order kept, a slim two-line sticky bar, tappable controls. */
+@media (max-width: 640px) {
+  [data-testid="stMainBlockContainer"] { padding-left: 0.6rem; padding-right: 0.6rem; padding-top: 4rem; }
+  [data-testid="stMain"] { scroll-padding-top: 11.5rem; }  /* header 3.75rem + pinned bar (~7rem) + margin */
+  /* Streamlit pulls HTML blocks up by 1rem; on stacked phone rows that makes cards overlap. */
+  .sl-banner { padding: 0.25rem 0.6rem; }
+  .sl-banner > div:last-child { display: none; }  /* chips and value chain: the lens is named in the clock line */
+  .st-key-brand_row [data-testid="stHorizontalBlock"] { flex-wrap: wrap; flex-direction: row; gap: 0.35rem; }
+  .st-key-brand_row [data-testid="stColumn"] { min-width: 0 !important; width: auto !important; flex: 1 1 100%% !important; }
+  .st-key-brand_row [data-testid="stWidgetLabel"] { display: none; }
+  .st-key-control_bar { padding: 0.3rem 0.5rem; border-left-width: 4px; }
+  .st-key-control_bar [data-testid="stHorizontalBlock"] { flex-wrap: wrap; flex-direction: row; gap: 0.35rem; }
+  .st-key-control_bar [data-testid="stColumn"] { min-width: 0 !important; width: auto !important; flex: 1 1 28%% !important; }
+  .st-key-control_bar [data-testid="stColumn"]:first-child { flex-basis: 100%% !important; }
+  .st-key-control_bar button { min-height: 2.6rem; }
+  .sl-score { gap: 0.45rem; } .sl-score .team { font-size: 0.9rem; } .sl-score .goals { font-size: 1.4rem; }
+  .sl-clock { margin-top: 0; }
+  .st-key-clock_strip { padding: 0 0.2rem; }
+  .st-key-clock_strip [data-testid="stHorizontalBlock"] { flex-wrap: wrap; flex-direction: row; gap: 0.35rem; }
+  .st-key-clock_strip [data-testid="stColumn"] { min-width: 0 !important; width: auto !important; flex: 1 1 30%% !important; }
+  .st-key-clock_strip [data-testid="stColumn"]:first-child { flex-basis: 100%% !important; }
+  .st-key-clock_strip button { min-height: 2.8rem; padding: 0.2rem 0.3rem; }
+  .st-key-clock_strip button p { white-space: normal; font-size: 0.78rem; line-height: 1.15; }
+  .sl-kpi-stack { display: grid; grid-template-columns: 1fr 1fr; gap: 0.4rem; }
+  .sl-kpi-grid { grid-template-columns: 1fr 1fr; }
+  .sl-kpi, .sl-kpi-grid .sl-kpi { height: auto; min-height: 62px; }
+  .st-key-story_rail, .st-key-analyst_log { height: auto !important; max-height: none !important; overflow: visible !important; }
+  button { min-height: 2.5rem; }
+}
 </style>
 """
 
@@ -295,6 +352,26 @@ def on_breakdown_row():
     ids = st.session_state.get("_breakdown_ids", [])
     if rows and rows[0] < len(ids):
         st.session_state["selected_event"] = ids[rows[0]]
+
+
+DISPLAY_DEFAULTS = {"disp_labels": True, "disp_counts": True, "disp_guides": True}
+
+
+def _display() -> dict:
+    """Analyst display options (overlay density): labels, counts, guides. Defaults on."""
+    return {k[5:]: st.session_state.get(k, v) for k, v in DISPLAY_DEFAULTS.items()}
+
+
+def render_display_controls() -> None:
+    """One small popover instead of a settings panel; applies to the move pitch and every map."""
+    with st.popover("Display", icon=":material/tune:", width="stretch"):
+        st.toggle("Player labels", value=True, key="disp_labels",
+                  help="Names next to the move's step numbers; the six most involved players on the pass network.")
+        st.toggle("Count badges", value=True, key="disp_counts",
+                  help="Counts on the busiest pass-network links and on activity-map cells.")
+        st.toggle("Zone & lane guides", value=True, key="disp_guides",
+                  help="Five-lane grid, third lines and their labels.")
+        st.caption("Overlay density only. Positions stay schematic (zone × lane), never tracking.")
 
 
 def _notes() -> list[dict]:
@@ -444,27 +521,38 @@ def _selected_move(replay: Replay, snap: dict) -> tuple[dict | None, list[dict],
 # --- sections ----------------------------------------------------------------
 
 def render_banner(theme: str, analyst: bool) -> None:
+    """Brand row (scrolls away): logo, lens chip, value chain, and the session settings: replay speed and lens."""
     lens = "📋 Analyst Lens · tactical desk" if analyst else "📺 Fan Lens · broadcaster companion"
     chain = '<span class="arrow">→</span>'.join(
         f'<span class="step" title="{escape(tip)}"><b>{i}</b> {name}</span>'
         for i, (name, tip) in enumerate(VALUE_CHAIN, 1))
-    st.markdown(
-        f'<div class="sl-banner"><div>{_crop("lockup_dark" if theme == "dark" else "lockup_light", 64)}</div>'
-        f'<div style="text-align:right"><div><span class="sl-chip lens">{lens}</span>'
-        f'<span class="sl-chip">Synthetic Premier League-style scenario · simulated replay · fictional clubs</span></div>'
-        f'<div class="sl-chain">{chain}</div></div></div>',
-        unsafe_allow_html=True)
+    with st.container(key="brand_row"):
+        c_brand, c_speed, c_lens = st.columns([4.6, 1.5, 1.6], vertical_alignment="center")
+        c_brand.markdown(
+            f'<div class="sl-banner"><div>{_crop("lockup_dark" if theme == "dark" else "lockup_light", 48)}</div>'
+            f'<div style="text-align:right"><div><span class="sl-chip lens">{lens}</span>'
+            f'<span class="sl-chip">Synthetic Premier League-style scenario · simulated replay · fictional clubs</span>'
+            f'</div><div class="sl-chain">{chain}</div></div></div>',
+            unsafe_allow_html=True)
+        if not st.session_state.get("speed"):  # default, and re-select 1x if the active option was clicked off
+            st.session_state["speed"] = DEFAULT_SPEED
+        c_speed.segmented_control("Speed", list(SPEEDS), key="speed",
+                                  help="Replay speed. 1x = 10 simulated seconds per real second.")
+        c_lens.radio("Lens", ["Fan", "Analyst"], key="mode", horizontal=True, format_func=lambda m: f"{m} Lens",
+                     help="Fan Lens: a broadcaster companion. Analyst Lens: a tactical desk with references, "
+                          "move breakdowns, proxy analytics and full traceability.")
 
 
 def render_control_bar(replay: Replay, snap: dict, state, analyst: bool, theme: str) -> None:
-    """Sticky bar: score, clock, play/pause/reset, speed, lens, match clock and jump-to moments."""
+    """Sticky bar with the essentials (score, clock, half, play state and lens, play/pause/reset), then a
+    non-sticky clock strip (match-clock slider and jump-to moments) that scrolls away with the page. Speed and lens
+    are set in the brand row above, so the pinned part stays small in every browser."""
     home, away = _teams(replay)
     score = snap["metrics"]["score"]["value"]
     half = "1st half" if snap["period"] == 1 else "2nd half"
     status = "▶ Playing" if state.playing else ("🏁 Full time" if state.clock >= state.duration else "⏸ Paused")
     with st.container(key="control_bar"):
-        c_score, c_play, c_pause, c_reset, c_speed, c_lens = st.columns(
-            [3.1, 0.9, 0.9, 0.9, 1.9, 1.8], vertical_alignment="center")
+        c_score, c_play, c_pause, c_reset = st.columns([4.2, 1, 1, 1], vertical_alignment="center")
         c_score.markdown(
             f'<div class="sl-score">{_crop("icon_dark" if theme == "dark" else "icon_light", 30)}'
             f'<span class="team home">{escape(home["name"])}</span>'
@@ -477,56 +565,85 @@ def render_control_bar(replay: Replay, snap: dict, state, analyst: bool, theme: 
         c_pause.button("Pause", icon=":material/pause:", on_click=on_pause, disabled=not state.playing,
                        width="stretch")
         c_reset.button("Reset", icon=":material/replay:", on_click=on_reset, width="stretch")
-        if not st.session_state.get("speed"):  # default, and re-select 1x if the active option was clicked off
-            st.session_state["speed"] = DEFAULT_SPEED
-        c_speed.segmented_control("Speed", list(SPEEDS), key="speed",
-                                  help="Replay speed. 1x = 10 simulated seconds per real second.")
-        c_lens.radio("Lens", ["Fan", "Analyst"], key="mode", horizontal=True, format_func=lambda m: f"{m} Lens",
-                     help="Fan Lens: a broadcaster companion. Analyst Lens: a tactical desk with references, "
-                          "move breakdowns, proxy analytics and full traceability.")
+    with st.container(key="clock_strip"):  # not sticky: scrubbing and jumps live here and scroll away
         moments = DEMO_MOMENTS.get(replay.match["match_id"], ())
-        c_clock, *c_moments = st.columns([3.4] + [1.25] * len(moments), vertical_alignment="bottom")
+        c_clock, *c_moments = st.columns([3.4] + [1.25] * len(moments), vertical_alignment="center")
         st.session_state["seek_clock"] = state.clock
         c_clock.select_slider("Match clock", options=range(replay.duration + 1), key="seek_clock",
-                              format_func=clock_label, on_change=on_seek)
+                              format_func=clock_label, on_change=on_seek, label_visibility="collapsed")
         icons = {"Momentum swing": ":material/swap_horiz:", "Goal moment": "⚽", "Late pressure": ":material/trending_up:"}
         for col, (label, seconds) in zip(c_moments, moments):
             col.button(f"{label} ({clock_label(seconds)})", icon=icons.get(label), on_click=on_demo,
                        args=(seconds,), width="stretch", help=f"Jump to {clock_label(seconds)} and pause")
 
 
+KPI_LABELS = {"pressure": "Pressure", "pass_share": "Pass share", "danger": "Danger index",
+              "territory": "Territory", "evidence": "Evidence level", "shot_quality": "Shot Quality",
+              "turning": "Turning point"}
+# Analyst defaults: everything except evidence level, which every explanation's status line already reports.
+ANALYST_KPI_DEFAULT = {"pressure", "pass_share", "danger", "territory", "shot_quality", "turning"}
+
+
+def _kpi_visible(key: str) -> bool:
+    return st.session_state.get(f"kpi_{key}", key in ANALYST_KPI_DEFAULT)
+
+
+def render_kpi_menu() -> None:
+    """Analyst: one small popover to show or hide each metric card (visibility only, no reordering)."""
+    shown = sum(_kpi_visible(k) for k in KPI_LABELS)
+    with st.popover(f"Metrics {shown}/{len(KPI_LABELS)}", icon=":material/view_column:", width="stretch"):
+        for key, label in KPI_LABELS.items():
+            st.checkbox(label, value=key in ANALYST_KPI_DEFAULT, key=f"kpi_{key}")
+        st.caption("Hidden cards only leave the strip; the metrics still drive the explanation and traceability.")
+
+
 def render_kpis(replay: Replay, snap: dict, analyst: bool) -> None:
+    """Fan: a compact vertical stack (placed beside the key content by the caller). Analyst: a fixed-width card
+    grid with only the cards chosen in the Metrics menu; hiding cards never stretches the others."""
+    cards = _kpi_cards(replay, snap, analyst)
+    if not analyst:
+        st.markdown(f'<div class="sl-kpi-stack">{"".join(cards.values())}</div>', unsafe_allow_html=True)
+        return
+    visible = [html for key, html in cards.items() if _kpi_visible(key)]
+    if visible:
+        st.markdown(f'<div class="sl-kpi-grid">{"".join(visible)}</div>', unsafe_allow_html=True)
+    else:
+        st.caption("All metric cards are hidden. Use Metrics to show them again.")
+
+
+def _kpi_cards(replay: Replay, snap: dict, analyst: bool) -> dict[str, str]:
     m = snap["metrics"]
     home, away = _teams(replay)
     h, a = home["id"], away["id"]
     mom = m["momentum"]["value"]
     suf = m["data_sufficiency"]
     tc = m["territorial_control"]
-    cards = [
-        _kpi("🌊 Pressure", momentum_cue(mom, home["name"], away["name"]), f"{mom:+.2f} · −1 {a} … +1 {h}",
-             MOMENTUM_HELP, small=True),
-        _kpi(f"↗️ Pass share · {h}–{a}", _split(m["pass_share"]["value"], h, a, ".0f", "%"),
-             window_label(m["pass_share"]["window"]), "Share of pass events. Not possession."),
-        _kpi(f"🔥 Danger index · {h}–{a}", _split(m["danger_score"]["value"], h, a, ".1f"),
-             window_label(m["danger_score"]["window"]), "Weighted attacking actions. A simple index, not xG."),
-        _kpi(f"🗺️ Territory · {h}–{a}", _split(tc["value"], h, a, ".0f", "%"),
-             f"in attacking areas, {window_label(tc['window'])}",
-             "Share of each team's actions in the attacking third or box."),
-        _kpi("📊 Evidence level", EVIDENCE_LEVELS.get(suf["value"], suf["value"]),
-             f"{suf['details']['event_count']} events, {window_label(suf['window'])}",
-             "How much data is behind the numbers. Low = treat them with caution."),
-    ]
+    cards = {
+        "pressure": _kpi("🌊 Pressure", momentum_cue(mom, home["name"], away["name"]),
+                         f"{mom:+.2f} · −1 {a} … +1 {h}", MOMENTUM_HELP, small=True),
+        "pass_share": _kpi(f"↗️ Pass share · {h}–{a}", _split(m["pass_share"]["value"], h, a, ".0f", "%"),
+                           window_label(m["pass_share"]["window"]), "Share of pass events. Not possession."),
+        "danger": _kpi(f"🔥 Danger index · {h}–{a}", _split(m["danger_score"]["value"], h, a, ".1f"),
+                       window_label(m["danger_score"]["window"]), "Weighted attacking actions. A simple index, not xG."),
+        "territory": _kpi(f"🗺️ Territory · {h}–{a}", _split(tc["value"], h, a, ".0f", "%"),
+                          f"in attacking areas, {window_label(tc['window'])}",
+                          "Share of each team's actions in the attacking third or box."),
+        "evidence": _kpi("📊 Evidence level", EVIDENCE_LEVELS.get(suf["value"], suf["value"]),
+                         f"{suf['details']['event_count']} events, {window_label(suf['window'])}",
+                         "How much data is behind the numbers. Low = treat them with caution."),
+    }
     if analyst:
         inf = m["inflection_point"]
         v = inf["value"]
         sqi = A.team_shot_summary(A.shots(snap["events"], h), (h, a))
-        cards.append(_kpi(f"🎯 Shot Quality · {h}–{a}", f"{sqi[h]['sqi_total']:.2f} – {sqi[a]['sqi_total']:.2f}",
-                          f"{sqi[h]['shots']} – {sqi[a]['shots']} shots · proxy, not xG", SQI_HELP))
-        cards.append(_kpi("🔄 Turning point", f"{clock_label(v['to_seconds'])} → {inf['team_id']}" if v else "None yet",
-                          f"change {v['delta']:+.2f}" if v else "no swing above 0.8 yet",
-                          "Largest momentum swing so far (above 0.8 within 2 minutes)."))
-    for col, card in zip(st.columns(len(cards)), cards):
-        col.markdown(card, unsafe_allow_html=True)
+        cards["shot_quality"] = _kpi(f"🎯 Shot Quality · {h}–{a}",
+                                     f"{sqi[h]['sqi_total']:.2f} – {sqi[a]['sqi_total']:.2f}",
+                                     f"{sqi[h]['shots']} – {sqi[a]['shots']} shots · proxy, not xG", SQI_HELP)
+        cards["turning"] = _kpi("🔄 Turning point",
+                                f"{clock_label(v['to_seconds'])} → {inf['team_id']}" if v else "None yet",
+                                f"change {v['delta']:+.2f}" if v else "no swing above 0.8 yet",
+                                "Largest momentum swing so far (above 0.8 within 2 minutes).")
+    return cards
 
 
 COMPACT_ROWS = ("Shots", "On target", "Corners", "Fouls", "Passes", "Attacking actions")
@@ -593,14 +710,22 @@ def render_key_moves(replay: Replay, snap: dict, analyst: bool):
     sel = st.session_state["selected_move"]
     st.session_state["featured_move"] = sel if sel in featured_ids else None
     st.session_state["any_move"] = sel
-    c_feat, c_any = st.columns([3, 2], vertical_alignment="bottom")
-    c_feat.segmented_control(
-        "Featured moves (highest impact)", featured_ids, key="featured_move", on_change=on_featured_move,
-        format_func=lambda sid: f"{'⚽ ' if by_feat[sid]['has_goal'] else ''}{names[by_feat[sid]['team_id']]} · "
-                                f"{clock_label(by_feat[sid]['start_seconds'])}")
+    feat_label = lambda sid: (f"{'⚽ ' if by_feat[sid]['has_goal'] else ''}{names[by_feat[sid]['team_id']]} · "
+                              f"{clock_label(by_feat[sid]['start_seconds'])}")
     by_id = {m["sequence_id"]: m for m in everything}
-    c_any.selectbox(f"All moves so far ({len(everything)})", list(by_id), key="any_move", on_change=on_any_move,
-                    format_func=lambda sid: _move_label(by_id[sid], names))
+    if analyst:  # one dominant move picker; the any-move list and the threat view sit on a quieter row below
+        with st.container(key="move_primary"):
+            st.segmented_control("Key moves · highest impact", featured_ids, key="featured_move",
+                                 on_change=on_featured_move, format_func=feat_label)
+        with st.container(key="move_secondary"):
+            c_any, c_view_col = st.columns([1.15, 1], vertical_alignment="bottom")
+        c_view = [c_view_col]
+    else:
+        c_feat, c_any = st.columns([3, 2], vertical_alignment="bottom")
+        c_feat.segmented_control("Featured moves (highest impact)", featured_ids, key="featured_move",
+                                 on_change=on_featured_move, format_func=feat_label)
+    c_any.selectbox(f"{'Any move' if analyst else 'All moves so far'} ({len(everything)})", list(by_id),
+                    key="any_move", on_change=on_any_move, format_func=lambda sid: _move_label(by_id[sid], names))
     events = move_events(snap, move["sequence_id"])
     points = move_points(events, home["id"], replay.players, replay.config)
     gains = underlay = labels = attack = None
@@ -608,7 +733,9 @@ def render_key_moves(replay: Replay, snap: dict, analyst: bool):
     if analyst:
         if not st.session_state.get("threat_view"):  # default, and re-select if the active option was clicked off
             st.session_state["threat_view"] = T.VIEW_GAINS
-        st.segmented_control("Threat view", list(T.THREAT_VIEWS), key="threat_view", help=THREAT_HELP)
+        short = {T.VIEW_GAINS: "Move gains", T.VIEW_DANGER: "Danger map", T.VIEW_OFF: "Off"}
+        c_view[0].segmented_control("Threat view", list(T.THREAT_VIEWS), key="threat_view", format_func=short.get,
+                                    help="Move gains = Gains of this move (default). " + THREAT_HELP)
         view = st.session_state["threat_view"]
         right = move["team_id"] == home["id"]
         if view == T.VIEW_GAINS:
@@ -617,8 +744,10 @@ def render_key_moves(replay: Replay, snap: dict, analyst: bool):
             underlay, labels = T.threat_underlay(right), T.threat_cell_labels(right)
         attack = {"team": names[move["team_id"]], "target": (away if right else home)["name"], "right": right,
                   "color": HOME_COLOR if right else AWAY_COLOR}
+    disp = _display()
     st.plotly_chart(pitch_figure(points, home, away, detailed=analyst, highlight=st.session_state.get("selected_event"),
-                                 palette=_pal(), threat=gains, underlay=underlay, cell_labels=labels, attack=attack),
+                                 palette=_pal(), threat=gains, underlay=underlay, cell_labels=labels, attack=attack,
+                                 guides=disp["guides"] if analyst else True, names=analyst and disp["labels"]),
                     config=PLOT_CONFIG, key="pitch")
     st.caption((THREAT_VIEW_NOTES[view] + " Zone Threat is a fixed grid, not xT. " + TACTICAL_NOTE + " "
                 if analyst else "") + PITCH_NOTE)
@@ -935,6 +1064,7 @@ def render_workspace(replay: Replay, snap: dict, theme: str) -> None:
     home, away = _teams(replay)
     colors = _colors(replay)
     events = snap["events"]
+    disp = _display()
     tabs = st.tabs(["🎯 Move", "🗺️ Maps", "📊 Stats & tide", "🧪 Proxy leaders", "👥 Lineups"])
     maps = tabs[1].tabs(["🔥 Activity map", "🔗 Pass network", "🥅 Shot map", "🛡️ Defensive actions"])
     with tabs[0]:  # the pitch gets the full workspace width; the two cards sit side by side below it
@@ -958,14 +1088,16 @@ def render_workspace(replay: Replay, snap: dict, theme: str) -> None:
             cols = st.columns(2)
             for col, team, rgb, right in zip(cols, (home, away), (HOME_RGB, AWAY_RGB), (True, False)):
                 col.markdown(f"**{team['name']}** · actions per zone × lane")
-                col.plotly_chart(A.zone_heatmap_figure(events, team, right, rgb), config=PLOT_CONFIG,
+                col.plotly_chart(A.zone_heatmap_figure(events, team, right, rgb, show_counts=disp["counts"],
+                                                       guides=disp["guides"]), config=PLOT_CONFIG,
                                  key=f"heat_{team['id']}")
         else:
             team = home if pick.startswith(home["id"]) else away
             right = team["id"] == home["id"]
             n = sum(A.zone_activity(events, team["id"], pick).values())
             st.markdown(f"**{replay.players[pick]['name']}** · {n} actions so far")
-            st.plotly_chart(A.zone_heatmap_figure(events, team, right, HOME_RGB if right else AWAY_RGB, player_id=pick),
+            st.plotly_chart(A.zone_heatmap_figure(events, team, right, HOME_RGB if right else AWAY_RGB, player_id=pick,
+                                                  show_counts=disp["counts"], guides=disp["guides"]),
                             config=PLOT_CONFIG, key="heat_player_map")
         st.caption("Counts of actions per zone × lane cell so far: a schematic heat map of cells, not coordinates.")
     with maps[1]:
@@ -979,11 +1111,12 @@ def render_workspace(replay: Replay, snap: dict, theme: str) -> None:
             if layout == "Formation slot":
                 slots = lineup_slots(team_lineup(replay.match, team, lineups), attacks_right=right)
             else:
-                slots = A.average_action_positions(events, team["id"], right)
+                slots = A.spread_positions(A.average_action_positions(events, team["id"], right))
             col.markdown(f"**{team['name']}** · {sum(links.values())} links")
             col.plotly_chart(A.pass_network_figure(links, slots, team, colors[team["id"]], replay.players,
                                                    threat=T.link_threat(events, team["id"]),
-                                                   player_threat=p_threat, label_top=3),
+                                                   player_threat=p_threat, label_top=3 if disp["counts"] else 0,
+                                                   name_top=6 if disp["labels"] else 0, guides=disp["guides"]),
                              config=PLOT_CONFIG, key=f"net_{team['id']}")
             top = sorted(A.merged_links(links, T.link_threat(events, team["id"])).items(),
                          key=lambda kv: (-kv[1]["n"], kv[0]))[:3]
@@ -992,13 +1125,14 @@ def render_workspace(replay: Replay, snap: dict, theme: str) -> None:
         st.caption("Schematic pass network: a link = a pass, cross, corner or free kick followed by a team-mate's "
                    "next action in the same move. Line width = links; line colour = threat gain moved along the link "
                    "(Zone Threat grid, grey = none); the busiest links show their count. Players sit at the average "
-                   "of their zone × lane cells or at their formation slots, never at measured positions.")
+                   "of their zone × lane cells, nudged apart so they don't stack (or at their formation slots), never "
+                   "at measured positions. The six most involved players are named; hover for everyone.")
     with maps[2]:
         shot_list = A.shots(events, home["id"])
         summary = A.team_shot_summary(shot_list, (home["id"], away["id"]))
         c_map, c_tab = st.columns([3, 2], gap="medium")
-        c_map.plotly_chart(A.shot_map_figure(shot_list, home, away, colors, replay.players), config=PLOT_CONFIG,
-                           key="shot_map")
+        c_map.plotly_chart(A.shot_map_figure(shot_list, home, away, colors, replay.players, guides=disp["guides"]),
+                           config=PLOT_CONFIG, key="shot_map")
         c_map.caption("Schematic shot map: zone × lane positions, marker size = Shot Quality Index, ★ goal · ● saved "
                       "· ○ off target · ✕ blocked. Not real shot coordinates and not xG.")
         with c_tab:
@@ -1010,8 +1144,8 @@ def render_workspace(replay: Replay, snap: dict, theme: str) -> None:
             st.caption(SQI_HELP)
     with maps[3]:
         pts = A.defensive_actions(events, home["id"])
-        st.plotly_chart(A.defensive_map_figure(pts, home, away, colors, replay.players), config=PLOT_CONFIG,
-                        key="def_map")
+        st.plotly_chart(A.defensive_map_figure(pts, home, away, colors, replay.players, guides=disp["guides"]),
+                        config=PLOT_CONFIG, key="def_map")
         counts = {t["id"]: {k: sum(1 for p in pts if p["team_id"] == t["id"] and p["type"] == k)
                             for k in A.DEFENSIVE_TYPES} for t in (home, away)}
         st.caption(" · ".join(f"{t['name']}: " + ", ".join(f"{n} {k}s" for k, n in counts[t["id"]].items() if n)
@@ -1089,25 +1223,37 @@ def render(dataset_path: str) -> None:
     # 1. Brand, match state and controls (sticky), headline cards
     render_banner(theme, analyst)
     render_control_bar(replay, snap, state, analyst, theme)
-    render_kpis(replay, snap, analyst)
 
     if analyst:
+        # 2a. Metric strip: only the cards the analyst keeps visible, with the menu at its right end
+        c_cards, c_menu = st.columns([8.6, 1.4], vertical_alignment="center")
+        with c_cards:
+            render_kpis(replay, snap, analyst)
+        with c_menu:
+            render_kpi_menu()
         # 2. Tactical workspace = the analytical surface (move, maps, stats & tide, proxy leaders, lineups);
         #    the right rail holds the story: key moments log, analyst explanation, notes
         c_work, c_rail = st.columns([2.45, 1.55], gap="medium")
         with c_work, st.container(border=True):
-            _title("📋 Tactical workspace", "schematic · proxy-based · synthetic data")
+            c_title, c_disp = st.columns([5, 1.2], vertical_alignment="center")
+            with c_title:
+                _title("📋 Tactical workspace", "schematic · proxy-based · synthetic data")
+            with c_disp:
+                render_display_controls()
             render_workspace(replay, snap, theme)
         with c_rail:
-            with st.container(border=True, height=430):  # scrolls inside, so the rail keeps its shape
+            with st.container(border=True, height=330, key="analyst_log"):  # scrolls inside; full height on phones
                 render_match_story(replay, snap, "📋 Key moments log", 8, "Moments")
             with st.container(border=True):
                 render_explanation(replay, snap, state)
             with st.container(border=True):
                 render_notes(replay, state)
     else:
-        # 2. Pictures and numbers on the left (key move · stats & pressure · lineups), the story on the right
-        c_main, c_rail = st.columns([3, 2], gap="medium")
+        # 2. Metrics as a slim stack on the left, pictures and numbers in the middle (key move · stats & pressure ·
+        #    lineups), the story on the right; on phones the stack becomes a two-column grid above the pitch
+        c_kpi, c_main, c_rail = st.columns([1.05, 3, 2], gap="small")
+        with c_kpi:
+            render_kpis(replay, snap, analyst)
         with c_main, st.container(border=True):
             _title("⚽ Key moments")
             tab_move, tab_stats, tab_line = st.tabs(["⚽ Key move", "📊 Stats & pressure", "👥 Lineups"])
@@ -1124,8 +1270,8 @@ def render(dataset_path: str) -> None:
             with tab_line:
                 render_lineups(replay, snap, analyst=False)
         with c_rail:
-            with st.container(border=True):
-                render_match_story(replay, snap, "📰 Match Story", 3, "Key moments")
+            with st.container(border=True, height=340, key="story_rail"):  # Live Story stays on the first screen
+                render_match_story(replay, snap, "📰 Match Story", 4, "Key moments")
             with st.container(border=True):
                 render_explanation(replay, snap, state)
     # 4. Evidence

@@ -216,20 +216,65 @@ def average_action_positions(events: list[dict], team_id: str, attacks_right: bo
 
 # --- figures ---------------------------------------------------------------------
 
-def _base_layout(fig, height: int = 300):
-    from .pitch import _pitch_shapes
+def _base_layout(fig, height: int = 300, guides: bool = True):
+    """Map board: high-contrast pitch on a deep card; grass below the figure's own overlay shapes, lines above."""
+    from .pitch import MAP_CARD, _pitch_shapes
 
-    fig.update_layout(shapes=_pitch_shapes() + list(fig.layout.shapes), height=height,
-                      margin={"l": 4, "r": 4, "t": 6, "b": 4}, showlegend=False,
-                      xaxis={"range": [-3, 103], "visible": False, "fixedrange": True},
+    overlay = list(fig.layout.shapes)
+    fig.layout.shapes = ()  # replace, never merge: update_layout(shapes=...) updates existing shapes index by index
+    markings = _pitch_shapes(simple=not guides, strong=True)
+    grass = [s for s in markings if s.get("layer") == "below"]
+    lines = [s for s in markings if s.get("layer") != "below"]
+    fig.update_layout(shapes=grass + overlay + lines, height=height,
+                      margin={"l": 6, "r": 6, "t": 6, "b": 6}, showlegend=False,
+                      # constrain="domain": the plot area shrinks to the pitch instead of the ranges growing, so
+                      # the dark board hugs the pitch at any panel width
+                      xaxis={"range": [-3, 103], "visible": False, "fixedrange": True, "constrain": "domain"},
                       yaxis={"range": [-3, 103], "visible": False, "fixedrange": True, "scaleanchor": "x",
-                             "scaleratio": 0.68},
-                      plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)")
+                             "scaleratio": 0.68, "constrain": "domain"},
+                      plot_bgcolor=MAP_CARD, paper_bgcolor="rgba(0,0,0,0)")
     return fig
 
 
+def spread_positions(rows: list[dict], min_gap: float = 7.0, rounds: int = 40) -> list[dict]:
+    """Display positions for schematic nodes: each player gets a small fixed nudge (from a hash of the id, so it is
+    the same on every run), then nodes closer than `min_gap` (in drawn units, y scaled by the pitch ratio) are
+    pushed apart. Keeps `mean_x` / `mean_y`; never claims a measured position."""
+    import hashlib
+    import math
+
+    pts = {}
+    for r in rows:
+        h = int(hashlib.md5(r["player_id"].encode()).hexdigest()[:8], 16)
+        angle, radius = (h % 360) * math.pi / 180, 1.5 + (h >> 9) % 26 / 10
+        pts[r["player_id"]] = [r["x"] + radius * math.cos(angle), r["y"] + radius * math.sin(angle)]
+    ids = sorted(pts)
+    for _ in range(rounds):
+        moved = False
+        for i, a in enumerate(ids):
+            for b in ids[i + 1:]:
+                dx, dy = pts[b][0] - pts[a][0], (pts[b][1] - pts[a][1]) * 0.68
+                d = math.hypot(dx, dy)
+                if d < min_gap:
+                    ux, uy = (dx / d, dy / d) if d > 1e-6 else (1.0, 0.0)
+                    push = (min_gap - d) / 2
+                    pts[a][0] -= ux * push
+                    pts[a][1] -= uy * push / 0.68
+                    pts[b][0] += ux * push
+                    pts[b][1] += uy * push / 0.68
+                    moved = True
+        if not moved:
+            break
+    out = []
+    for r in rows:
+        x, y = pts[r["player_id"]]
+        out.append({**r, "mean_x": r["x"], "mean_y": r["y"], "x": round(min(98, max(2, x)), 2),
+                    "y": round(min(98, max(2, y)), 2)})
+    return out
+
+
 def zone_heatmap_figure(events: list[dict], team: dict, attacks_right: bool, color_rgb: str,
-                        player_id: str | None = None):
+                        player_id: str | None = None, show_counts: bool = True, guides: bool = True):
     """Zone × lane activity grid for one team or one of its players (opacity ∝ count)."""
     import plotly.graph_objects as go
 
@@ -239,18 +284,23 @@ def zone_heatmap_figure(events: list[dict], team: dict, attacks_right: bool, col
     shapes, xs, ys, texts = [], [], [], []
     for (zone, lane), n in counts.items():
         x0, y0, x1, y1 = cell_rect(zone, lane, attacks_right)
-        shapes.append({"type": "rect", "x0": x0, "y0": y0, "x1": x1, "y1": y1, "line": {"width": 0},
-                       "fillcolor": f"rgba({color_rgb},{0.15 + 0.7 * n / peak:.2f})"})
+        shapes.append({"type": "rect", "x0": x0, "y0": y0, "x1": x1, "y1": y1,
+                       "line": {"width": 1, "color": "rgba(255,255,255,0.6)"},
+                       "fillcolor": f"rgba({color_rgb},{0.30 + 0.62 * n / peak:.2f})"})
         xs.append((x0 + x1) / 2)
         ys.append((y0 + y1) / 2)
         texts.append(str(n))
     fig.update_layout(shapes=shapes)
-    fig.add_trace(go.Scatter(x=xs, y=ys, mode="text", text=texts, textfont={"color": "white", "size": 12},
-                             hoverinfo="skip"))
-    return _base_layout(fig)
+    fig.add_trace(go.Scatter(x=xs, y=ys, mode="markers", marker={"size": 18, "opacity": 0},
+                             hovertext=[f"{t} action(s)" for t in texts], hoverinfo="text"))
+    for x, y, t in zip(xs, ys, texts) if show_counts else ():
+        fig.add_annotation(x=x, y=y, text=f"<b>{t}</b>", showarrow=False, font={"size": 11, "color": "white"},
+                           bgcolor="rgba(15,23,42,0.6)", borderpad=2)
+    return _base_layout(fig, height=270, guides=guides)
 
 
-def defensive_map_figure(points: list[dict], home: dict, away: dict, colors: dict, players: dict):
+def defensive_map_figure(points: list[dict], home: dict, away: dict, colors: dict, players: dict,
+                         guides: bool = True):
     import plotly.graph_objects as go
 
     symbols = {"tackle": "x", "interception": "hexagon", "clearance": "triangle-up", "save": "square"}
@@ -264,10 +314,11 @@ def defensive_map_figure(points: list[dict], home: dict, away: dict, colors: dic
                         "line": {"color": "white", "width": 1}},
                 hovertext=[f"{p['clock']} · {p['type'].capitalize()} · "
                            f"{players.get(p['player_id'], {}).get('name', '')}" for p in pts], hoverinfo="text"))
-    return _base_layout(fig)
+    return _base_layout(fig, guides=guides)
 
 
-def shot_map_figure(shot_list: list[dict], home: dict, away: dict, colors: dict, players: dict):
+def shot_map_figure(shot_list: list[dict], home: dict, away: dict, colors: dict, players: dict,
+                    guides: bool = True):
     """Schematic shot map: zone × lane positions. Size and opacity grow with SQI; the result sets the symbol
     (★ goal in gold, ● saved, ○ off target, ✕ blocked). Hover shows player, time, result and SQI."""
     import plotly.graph_objects as go
@@ -290,7 +341,7 @@ def shot_map_figure(shot_list: list[dict], home: dict, away: dict, colors: dict,
                        f"{s['outcome'].replace('_', ' ')} · SQI {s['sqi']:.2f}"
                        + (f" · set up by {players.get(s['setup_player_id'], {}).get('name', '')}"
                           if s["setup_player_id"] else "") for s in own], hoverinfo="text"))
-    return _base_layout(fig)
+    return _base_layout(fig, guides=guides)
 
 
 def merged_links(links: dict, threat: dict | None = None) -> dict[tuple[str, str], dict]:
@@ -304,12 +355,26 @@ def merged_links(links: dict, threat: dict | None = None) -> dict[tuple[str, str
     return pairs
 
 
+def _bent(a: tuple, b: tuple, seed: str, bend: float = 0.12, steps: int = 12) -> tuple[list, list]:
+    """Points of a gentle quadratic curve from a to b; the side of the bend is fixed per link (stable)."""
+    import hashlib
+
+    sign = 1 if int(hashlib.md5(seed.encode()).hexdigest()[:2], 16) % 2 else -1
+    mx, my = (a[0] + b[0]) / 2, (a[1] + b[1]) / 2
+    cx, cy = mx - (b[1] - a[1]) * bend * sign, my + (b[0] - a[0]) * bend * sign
+    ts = [i / steps for i in range(steps + 1)]
+    return ([(1 - t) ** 2 * a[0] + 2 * (1 - t) * t * cx + t ** 2 * b[0] for t in ts],
+            [(1 - t) ** 2 * a[1] + 2 * (1 - t) * t * cy + t ** 2 * b[1] for t in ts])
+
+
 def pass_network_figure(links: dict, slots: list[dict], team: dict, color: str, players: dict,
-                        threat: dict | None = None, player_threat: dict | None = None, label_top: int = 0):
-    """Schematic pass network. Players sit at the given positions (formation slots or average action cells).
-    Lines get thicker / more opaque with repeated links. With `threat` ((passer, receiver) -> summed threat
-    gain) a line is coloured by the threat gain moved along it (grey = none); `label_top` writes the count on
-    the busiest links. Hover a line or a player for the counts."""
+                        threat: dict | None = None, player_threat: dict | None = None, label_top: int = 0,
+                        name_top: int | None = None, guides: bool = True):
+    """Schematic pass network. Players sit at the given positions (formation slots or spread average action
+    cells). Links are gentle curves that get thicker / more opaque with repetition. With `threat` ((passer,
+    receiver) -> summed threat gain) a link is coloured by the threat gain moved along it (grey = none);
+    `label_top` writes the count on the busiest links; `name_top` names only the most involved players (None =
+    all, 0 = none; everyone is on hover)."""
     import plotly.graph_objects as go
 
     from .threat import threat_color
@@ -325,13 +390,14 @@ def pass_network_figure(links: dict, slots: list[dict], team: dict, color: str, 
             hover = f"{players[a]['name']} ↔ {players[b]['name']} · {n} link(s)"
             if gain is not None:
                 hover += f" · threat gain {gain:+.2f} (grid proxy)"
+            xs, ys = _bent(pos[a], pos[b], f"{a}|{b}")
             fig.add_trace(go.Scatter(
-                x=[pos[a][0], pos[b][0]], y=[pos[a][1], pos[b][1]], mode="lines",
-                line={"color": ink, "width": 1 + 4 * min(n, peak) / peak}, opacity=0.4 + 0.5 * min(n, peak) / peak,
-                hovertext=hover, hoverinfo="text"))
+                x=xs, y=ys, mode="lines", line={"color": ink, "width": 1.2 + 4 * min(n, peak) / peak, "shape": "spline"},
+                opacity=0.45 + 0.5 * min(n, peak) / peak, hovertext=hover, hoverinfo="text"))
     drawn = [(k, r) for k, r in pairs.items() if k[0] in pos and k[1] in pos]
     for (a, b), row in sorted(drawn, key=lambda kv: (-kv[1]["n"], kv[0]))[:label_top]:
-        fig.add_annotation(x=(pos[a][0] + pos[b][0]) / 2, y=(pos[a][1] + pos[b][1]) / 2, text=f"<b>{row['n']}</b>",
+        xs, ys = _bent(pos[a], pos[b], f"{a}|{b}")
+        fig.add_annotation(x=xs[len(xs) // 2], y=ys[len(ys) // 2], text=f"<b>{row['n']}</b>",
                            showarrow=False, font={"size": 10, "color": "#111827"}, bgcolor="rgba(255,255,255,0.85)",
                            borderpad=1)
     involvement = {pid: 0 for pid in pos}
@@ -341,16 +407,18 @@ def pass_network_figure(links: dict, slots: list[dict], team: dict, color: str, 
                 involvement[pid] += n
     ids = list(pos)
     added = {p: (player_threat or {}).get(p, {}).get("added") for p in ids}
+    ranked = sorted(ids, key=lambda p: (-involvement[p], p))
+    named = set(ranked if name_top is None else ranked[:name_top])
     fig.add_trace(go.Scatter(
         x=[pos[p][0] for p in ids], y=[pos[p][1] for p in ids], mode="markers+text",
-        text=[players[p]["name"].split()[-1] for p in ids], textposition="bottom center",
-        textfont={"color": "white", "size": 9},
+        text=[players[p]["name"].split()[-1] if p in named else "" for p in ids], textposition="bottom center",
+        textfont={"color": "white", "size": 10},
         marker={"size": [9 + min(involvement[p], 6) * 1.5 for p in ids], "color": color,
                 "line": {"color": "white", "width": 1.5}},
         hovertext=[f"{players[p]['name']} · {involvement[p]} links"
                    + (f" · threat added {added[p]:.2f}" if added[p] is not None else "") for p in ids],
         hoverinfo="text"))
-    fig = _base_layout(fig, height=330)
+    fig = _base_layout(fig, height=280, guides=guides)
     xs, ys = [x for x, _ in pos.values()], [y for _, y in pos.values()]
     if xs:  # zoom both axes to the area the formation occupies, so the network reads at panel size
         fig.update_xaxes(range=[max(-3, min(xs) - 8), min(103, max(xs) + 8)])

@@ -118,3 +118,31 @@ def test_empty_note_is_not_added():
     button(at, "Add note at Min").click().run()
     assert at.session_state["notes"] == [] if "notes" in at.session_state else True
     assert any("Write something first." in c.value for c in at.caption)
+
+
+# --- layout CSS: sticky essentials, density, phones ---------------------------------------------
+
+def test_css_formats_for_every_theme_and_lens():
+    from matchpulse import ui
+
+    for theme in ui.THEMES:
+        css = ui.CSS % {**ui.THEMES[theme], "accent": "#000", "home": "#111", "away": "#222"}
+        assert "@media (max-width: 640px)" in css and "100%" in css  # %% escapes resolved, no stray %
+
+
+def test_only_the_essentials_are_sticky_and_content_clears_the_header():
+    from matchpulse import ui
+
+    css = ui.CSS
+    assert ':has(> .st-key-control_bar) { position: sticky;' in css
+    assert "st-key-clock_strip" in css and ":has(> .st-key-clock_strip)" not in css  # the strip scrolls away
+    assert "padding-top: 4.2rem" in css and "scroll-padding-top" in css
+
+
+def test_speed_and_lens_live_in_the_brand_row_not_the_sticky_bar():
+    at = app()
+    assert at.session_state["speed"] == "1x" and at.radio(key="mode").value == "Fan"
+    labels = [b.label for b in at.button]
+    assert {"Play", "Pause", "Reset"} <= set(labels)
+    at.radio(key="mode").set_value("Analyst").run()
+    assert not at.exception and any("📋 Tactical workspace" in m.value for m in at.markdown)

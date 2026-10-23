@@ -108,7 +108,7 @@ The Python package and `MATCHPULSE_*` environment variables keep the project's o
 ```bash
 .venv\Scripts\python -m pytest
 ```
-296 tests cover:
+308 tests cover:
 - **Data:** dataset rules, determinism and the fingerprint.
 - **Metrics and proxies:** every metric and the synthetic proxies.
 - **Replay:** speed and state handling.
