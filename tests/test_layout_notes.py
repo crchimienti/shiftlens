@@ -18,6 +18,7 @@ def replay():
 
 def app():
     at = AppTest.from_file(str(ROOT / "streamlit_app.py"), default_timeout=30)
+    at.session_state["mode"] = "Fan"  # Home is the landing view; these flows start in Fan Lens
     at.run()
     return at
 
@@ -71,7 +72,7 @@ def test_notes_never_reach_the_explanation_request(replay):
 
 def test_fan_lens_groups_stats_and_pressure_and_keeps_story_on_the_right():
     at = app()
-    assert [t.label for t in at.tabs] == ["⚽ Key move", "📊 Stats & pressure", "👥 Lineups"]
+    assert [t.label for t in at.tabs] == ["⚽ Key move", "📊 Stats & pressure", "📈 xG evolution", "👥 Lineups"]
     button(at, "Goal moment").click().run()
     assert any("📊 Match stats" in m.value for m in at.markdown)
     assert any("📰 Match Story" in m.value for m in at.markdown)
@@ -99,13 +100,13 @@ def test_analyst_rail_has_log_explanation_and_notes_that_seek_the_replay():
                   "Tide of the game", "Proxy leaders", "👥 Lineups"):
         assert title in titles
     at.text_area(key="note_text").input("Novak arrives late at the back post")  # form: sent with the submit
-    button(at, "Add note at Min 20:21").click().run()
-    assert [n["clock"] for n in at.session_state["notes"]] == ["20:21"]
+    button(at, "Add note at Min 84:20").click().run()
+    assert [n["clock"] for n in at.session_state["notes"]] == ["84:20"]
     assert at.session_state["note_text"] == ""  # cleared on submit
     button(at, "Momentum swing").click().run()
-    assert at.session_state["replay_state"].clock == 610
-    button(at, "Min 20:21").click().run()
-    assert at.session_state["replay_state"].clock == 1221 and not at.session_state["replay_state"].playing
+    assert at.session_state["replay_state"].clock == 1000
+    button(at, "Min 84:20").click().run()
+    assert at.session_state["replay_state"].clock == 5060 and not at.session_state["replay_state"].playing
     note_id = at.session_state["notes"][0]["id"]
     at.button(key=f"note_del_{note_id}").click().run()
     assert at.session_state["notes"] == []

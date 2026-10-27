@@ -18,7 +18,7 @@ from matchpulse.foundry_client import (
 from matchpulse.replay import Replay
 from matchpulse.validator import CONFIG_PATH, load_json, load_match
 
-AT = 674  # 11:14, 1-1
+AT = 2400  # 40:00, 1-1
 SECRET = "test-key-do-not-log"
 
 
@@ -91,7 +91,7 @@ def test_request_sends_only_the_evidence_package(fake, client, request_):
     evidence = json.loads(sent["body"]["messages"][1]["content"])["evidence"]
     assert set(evidence) == {"lens", "minute", "clock", "teams", "score", "metrics", "recent_events",
                              "data_sufficiency", "limitations"}
-    assert evidence["lens"] == "analyst" and evidence["minute"] == 11 and evidence["score"] == {"NBR": 1, "HBC": 1}
+    assert evidence["lens"] == "analyst" and evidence["minute"] == 40 and evidence["score"] == {"NBR": 1, "HBC": 1}
     assert len(evidence["recent_events"]) <= 12 and evidence["limitations"]
     raw = json.dumps(sent["body"])
     assert "allowed_event_ids" not in raw and "match_id" not in raw and SECRET not in raw
@@ -156,21 +156,21 @@ def test_schema_invalid_response_retries_then_falls_back(fake, client, request_)
 
 
 def test_invented_number_is_rejected_then_retry_succeeds(fake, client, request_):
-    invented = model_answer(request_, narrative="Harbor City have an xG of 2.7 and 99 shots.")
+    invented = model_answer(request_, narrative="Harbor City have an xG of 8.9 and 99 shots.")
     f = fake(chat_response(json.dumps(invented)), chat_response(json.dumps(model_answer(request_))))
     result = explain(request_, client)
     assert result["source"] == "llm" and [a["ok"] for a in result["attempts"]] == [False, True]
-    assert any("'2.7'" in e for e in result["attempts"][0]["errors"])
+    assert any("'8.9'" in e for e in result["attempts"][0]["errors"])
     assert len(f.requests) == 2
 
 
 def test_invalid_event_reference_falls_back(fake, client, request_):
     bad = model_answer(request_)
-    bad["key_points"][0]["event_refs"] = ["E104"]  # a future event at 11:14
+    bad["key_points"][0]["event_refs"] = ["E1000"]  # a future event at 40:00
     f = fake(chat_response(json.dumps(bad)), chat_response(json.dumps(bad)))
     result = explain(request_, client)
     assert result["source"] == "fallback" and len(f.requests) == 2
-    assert any("'E104' is not a visible event" in e for e in result["attempts"][1]["errors"])
+    assert any("'E1000' is not a visible event" in e for e in result["attempts"][1]["errors"])
 
 
 def test_refusal_falls_back_without_retry(fake, client, request_):

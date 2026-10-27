@@ -46,10 +46,10 @@ def test_request_rejects_unknown_mode(replay):
 # --- fallback: fan ----------------------------------------------------------
 
 def test_fan_fallback_valid_short_and_serializable(replay):
-    r = req(replay, 674, "fan")
+    r = req(replay, 2400, "fan")
     out = fallback(r)
     assert validate_explanation(out, r) == []
-    assert out["mode"] == "fan" and out["minute"] == 11 and out["source"] == "fallback"
+    assert out["mode"] == "fan" and out["minute"] == 40 and out["source"] == "fallback"
     assert len(out["key_points"]) <= 3 and len(out["narrative"]) <= 300
     assert out["headline"] == "All square at 1–1"
     json.dumps(out)
@@ -63,37 +63,37 @@ def test_fan_fallback_at_kickoff_flags_low_data(replay):
 
 
 def test_fan_fallback_names_latest_scorer(replay):
-    out = fallback(req(replay, 1290, "fan"))  # calm spell after the winner: no fresh goal or shot
+    out = fallback(req(replay, 5250, "fan"))  # calm spell after the winner: no fresh goal or shot
     assert out["headline"] == "Northbridge FC lead 2–1"
     assert any("Adrian Novak" in p["text"] for p in out["key_points"])
 
 
 def test_fan_fallback_calls_a_fresh_goal_with_the_setup(replay):
-    r = req(replay, 1221, "fan")  # the winner, just scored
+    r = req(replay, 5060, "fan")  # the winner, just scored
     out = fallback(r)
     assert out["headline"] == "⚽ GOAL! Northbridge FC lead 2–1"
-    assert out["narrative"].startswith("Adrian Novak scores for Northbridge FC, set up by Samuel Adeyemi's pass!")
+    assert out["narrative"].startswith("Adrian Novak scores for Northbridge FC, set up by Samuel Adeyemi's cross!")
     assert validate_explanation(out, r) == []
 
 
 def test_fan_fallback_calls_a_big_chance(replay):
-    r = req(replay, 194, "fan")  # 03:14, shot saved at 03:13
+    r = req(replay, 285, "fan")  # 04:45, shot saved at 04:44
     out = fallback(r)
-    assert "Big chance for Northbridge FC! Adrian Novak's shot is saved." in out["narrative"]
+    assert "Big chance for Northbridge FC! Marcus Lindqvist's shot is saved." in out["narrative"]
     assert validate_explanation(out, r) == []
 
 
 # --- fallback: analyst ------------------------------------------------------
 
 def test_analyst_fallback_detail_refs_and_limits(replay):
-    r = req(replay, 674, "analyst")
+    r = req(replay, 2400, "analyst")
     out = fallback(r)
     assert validate_explanation(out, r) == []
     assert 3 <= len(out["key_points"]) <= 6
     assert all(p["metric_refs"] for p in out["key_points"])
     assert any(p["event_refs"] for p in out["key_points"])
     assert any("not possession" in t for t in out["limitations"])
-    assert len(out["narrative"]) > len(fallback(req(replay, 674, "fan"))["narrative"])
+    assert len(out["narrative"]) > len(fallback(req(replay, 2400, "fan"))["narrative"])
 
 
 @pytest.mark.parametrize("mode", ["fan", "analyst"])
@@ -114,7 +114,7 @@ def test_fallback_deterministic(replay, mode):
 
 @pytest.fixture
 def valid(replay):
-    r = req(replay, 674, "analyst")
+    r = req(replay, 2400, "analyst")
     return r, fallback(r)
 
 
@@ -147,7 +147,7 @@ def test_validator_rejects(valid, mutate, fragment):
 
 
 def test_validator_fan_rules(replay):
-    r = req(replay, 674, "fan")
+    r = req(replay, 2400, "fan")
     out = fallback(r)
     out["key_points"] = out["key_points"] * 2
     out["narrative"] = "x" * 301
@@ -162,7 +162,7 @@ def test_validator_rejects_non_object(valid):
 def test_validator_accepts_reformatted_snapshot_numbers(valid):
     r, out = valid
     out = copy.deepcopy(out)
-    out["narrative"] = "Harbor City carried 46.1% of their events into attacking zones."
+    out["narrative"] = "Harbor City carried 15.4% of their events into attacking zones."
     assert validate_explanation(out, r) == []
 
 
@@ -228,14 +228,14 @@ def test_explain_guard():
 
 
 def test_traceability_rows_by_mode(replay):
-    metrics = replay.snapshot(674)["metrics"]
+    metrics = replay.snapshot(2400)["metrics"]
     fan, analyst = traceability_rows(metrics, "fan"), traceability_rows(metrics, "analyst")
     assert [r["metric"] for r in fan] == list(metrics)
     assert set(fan[0]) == {"metric", "value", "window", "sources"}
     assert {"formula_version", "config_version", "team_id", "source_event_ids"} <= set(analyst[0])
     mom = next(r for r in analyst if r["metric"] == "momentum")
     assert mom["source_event_ids"] == ", ".join(metrics["momentum"]["source_event_ids"])
-    assert mom["window"] == "08:14–11:14"
+    assert mom["window"] == "37:00–40:00"
 
 
 FULL_ENV = {"MATCHPULSE_OFFLINE": "0", "AZURE_OPENAI_ENDPOINT": "https://example.invalid",
@@ -263,6 +263,7 @@ def button(at, label):
 
 def test_ui_explain_guard_then_fan_then_analyst():
     at = AppTest.from_file(str(ROOT / "streamlit_app.py"), default_timeout=30)
+    at.session_state["mode"] = "Fan"  # Home is the landing view; these flows start in Fan Lens
     at.run()
     at.select_slider[0].set_value(600).run()
     button(at, "Play").click().run()

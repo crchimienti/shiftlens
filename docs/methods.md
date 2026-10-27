@@ -12,7 +12,7 @@ They are simple, transparent indices, not official or licensed statistics.
 
 ## Shared conventions
 
-- **Clock.** `t = minute × 60 + second` on the simulated replay clock (0–1320 s for the 22-minute
+- **Clock.** `t = minute × 60 + second` on the simulated replay clock (0–5400 s for the 90-minute
   demo match). It does not reset at half-time. Metrics are recomputed for whatever second the replay is on.
 - **Window.** Inclusive `[max(0, t − length), t]`. Events after `t` are never used.
 - **Event weight.** `weights.event[type] × weights.zone[zone]`. Types without a weight (save,

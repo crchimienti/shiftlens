@@ -21,7 +21,7 @@ from matchpulse.validator import CONFIG_PATH, load_json, load_match, validate_co
 # Tiny config with round numbers so expected values can be computed by hand.
 CONFIG = {
     "config_version": "test",
-    "schema_version": "1.0.0",
+    "schema_version": "1.1.0",
     "windows": {"pass_share_seconds": 60, "danger_seconds": 60, "momentum_seconds": 60,
                 "territorial_seconds": 60, "sufficiency_seconds": 60},
     "momentum": {"half_life_seconds": 30},
@@ -47,7 +47,7 @@ def make_match(events):
         rows.append(ev)
     goals = {s: sum(1 for e in rows if e["type"] == "goal" and e["team_id"] == s) for s in "HA"}
     team = lambda tid: {"id": tid, "name": tid, "players": [{"id": f"{tid}-01", "name": "P", "number": 1, "position": "FW"}]}
-    return {"match_id": "T", "schema_version": "1.0.0", "seed": 0, "duration_minutes": 18,
+    return {"match_id": "T", "schema_version": "1.1.0", "seed": 0, "duration_minutes": 18,
             "home_team": team("H"), "away_team": team("A"),
             "final_score": {"home": goals["H"], "away": goals["A"]}, "events": rows}
 
@@ -255,7 +255,7 @@ METRIC_KEYS = {"metric_name", "value", "window", "formula_version", "config_vers
 def test_compute_metrics_shape_and_serializable(demo):
     match, config = demo
     result = compute_metrics(match, config)
-    assert result["at_seconds"] == 22 * 60
+    assert result["at_seconds"] == 90 * 60
     assert len(result["metrics"]) == 8
     for name, m in result["metrics"].items():
         assert set(m) == METRIC_KEYS and m["metric_name"] == name
@@ -274,9 +274,11 @@ def test_compute_metrics_demo_story(demo):
     match, config = demo
     end = compute_metrics(match, config)["metrics"]
     assert end["score"]["value"] == {"NBR": 2, "HBC": 1}
-    assert end["highlighted_sequences"]["value"][0]["sequence_id"] == "S09"
-    assert end["inflection_point"]["team_id"] == "NBR"     # late winner swing
-    assert compute_metrics(match, config, 660)["metrics"]["inflection_point"]["team_id"] == "HBC"
+    top = end["highlighted_sequences"]["value"][0]
+    assert top["sequence_id"] == "S216" and top["has_goal"] and top["start_seconds"] // 60 == 84  # late winner
+    assert end["inflection_point"]["team_id"] == "NBR"     # the swing into the 23' opener
+    assert end["inflection_point"]["value"]["to_seconds"] == 1390
+    assert compute_metrics(match, config, 1000)["metrics"]["inflection_point"]["team_id"] == "HBC"
 
 
 def test_compute_metrics_rejects_invalid_config_reference(demo):
@@ -287,7 +289,7 @@ def test_compute_metrics_rejects_invalid_config_reference(demo):
         compute_metrics(match, bad)
 
 
-@pytest.mark.parametrize("at", [-1, 22 * 60 + 1, 10.5])
+@pytest.mark.parametrize("at", [-1, 90 * 60 + 1, 10.5])
 def test_compute_metrics_rejects_bad_clock(demo, at):
     match, config = demo
     with pytest.raises(ValueError):

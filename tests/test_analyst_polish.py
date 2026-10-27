@@ -42,7 +42,7 @@ def test_guides_toggle_removes_lane_and_third_lines(replay, events):
     assert dashed(A.zone_heatmap_figure(events, home, True, "0,0,255"))
     assert not dashed(A.zone_heatmap_figure(events, home, True, "0,0,255", guides=False))
     full = replay.snapshot(replay.duration)
-    pts = move_points(move_events(full, "S09"), "NBR", replay.players, replay.config)
+    pts = move_points(move_events(full, "S216"), "NBR", replay.players, replay.config)
     with_grid = pitch_figure(pts, home, replay.match["away_team"], detailed=True)
     clean = pitch_figure(pts, home, replay.match["away_team"], detailed=True, guides=False)
     assert sorted(s.y0 for s in dashed(with_grid) if s.x0 == 0) == list(FIVE_LANES[1:-1])
@@ -52,7 +52,7 @@ def test_guides_toggle_removes_lane_and_third_lines(replay, events):
 def test_player_labels_toggle_adds_names_to_step_numbers(replay):
     full = replay.snapshot(replay.duration)
     home, away = replay.match["home_team"], replay.match["away_team"]
-    pts = move_points(move_events(full, "S09"), "NBR", replay.players, replay.config)
+    pts = move_points(move_events(full, "S216"), "NBR", replay.players, replay.config)
     named = next(t for t in pitch_figure(pts, home, away, detailed=True, names=True).data if t.name == home["name"])
     plain = next(t for t in pitch_figure(pts, home, away, detailed=True).data if t.name == home["name"])
     assert plain.text[0] == "1" and named.text[0].startswith("1 ") and len(named.text[0]) > 2
@@ -85,6 +85,7 @@ def test_pass_network_curves_links_and_limits_names(replay, events):
 
 def test_display_popover_and_quiet_secondary_controls():
     at = AppTest.from_file(str(ROOT / "streamlit_app.py"), default_timeout=30)
+    at.session_state["mode"] = "Fan"  # Home is the landing view; these flows start in Fan Lens
     at.run()
     next(b for b in at.button if b.label.startswith("Goal moment")).click().run()
     at.radio(key="mode").set_value("Analyst").run()
@@ -109,6 +110,7 @@ def _kpi_blocks(at):
 
 def test_fan_metrics_are_a_vertical_stack_beside_the_key_content():
     at = AppTest.from_file(str(ROOT / "streamlit_app.py"), default_timeout=30)
+    at.session_state["mode"] = "Fan"  # Home is the landing view; these flows start in Fan Lens
     at.run()
     stack, grid = _kpi_blocks(at)
     assert len(stack) == 1 and not grid and stack[0].count('class="sl-kpi"') == 5
@@ -117,6 +119,7 @@ def test_fan_metrics_are_a_vertical_stack_beside_the_key_content():
 
 def test_analyst_metric_visibility_defaults_and_hiding():
     at = AppTest.from_file(str(ROOT / "streamlit_app.py"), default_timeout=30)
+    at.session_state["mode"] = "Fan"  # Home is the landing view; these flows start in Fan Lens
     at.run()
     at.radio(key="mode").set_value("Analyst").run()
     stack, grid = _kpi_blocks(at)
@@ -138,7 +141,7 @@ def test_metric_grid_keeps_card_width_when_cards_are_hidden():
     assert "repeat(auto-fill, minmax(150px, 1fr))" in ui.CSS  # empty tracks stay; cards never stretch
 
 
-# --- final UX: logo slot, KPI order, opt-in goal chime --------------------------------------------
+# --- final UX: logo slot, KPI order, opt-in goal cheer ---------------------------------------------
 
 def _grid_order(at):
     import re
@@ -149,6 +152,7 @@ def _grid_order(at):
 
 def test_logo_has_its_own_slot_apart_from_the_teams():
     at = AppTest.from_file(str(ROOT / "streamlit_app.py"), default_timeout=30)
+    at.session_state["mode"] = "Fan"  # Home is the landing view; these flows start in Fan Lens
     at.run()
     mark = next(m.value for m in at.markdown if 'class="sl-brandmark"' in m.value)
     score = next(m.value for m in at.markdown if 'class="sl-score"' in m.value)
@@ -157,6 +161,7 @@ def test_logo_has_its_own_slot_apart_from_the_teams():
 
 def test_analyst_can_reorder_kpi_cards_and_reset():
     at = AppTest.from_file(str(ROOT / "streamlit_app.py"), default_timeout=30)
+    at.session_state["mode"] = "Fan"  # Home is the landing view; these flows start in Fan Lens
     at.run()
     at.radio(key="mode").set_value("Analyst").run()
     default = _grid_order(at)
@@ -172,18 +177,22 @@ def test_analyst_can_reorder_kpi_cards_and_reset():
     assert _grid_order(at) == [x for x in default if x != "Pass share"] and not at.exception
 
 
-def test_goal_chime_is_a_short_valid_wav():
+def test_goal_cheer_is_the_bundled_short_clip():
     import io
     import wave
 
-    from matchpulse.ui import goal_chime_wav
+    from matchpulse.ui import GOAL_CHEER, goal_cheer_wav
 
-    with wave.open(io.BytesIO(goal_chime_wav())) as w:
-        assert (w.getnchannels(), w.getsampwidth()) == (1, 2) and 0.5 < w.getnframes() / w.getframerate() < 1.0
+    assert GOAL_CHEER.exists() and goal_cheer_wav() == GOAL_CHEER.read_bytes()
+    with wave.open(io.BytesIO(goal_cheer_wav())) as w:
+        seconds = w.getnframes() / w.getframerate()
+        assert w.getnchannels() == 1 and w.getsampwidth() == 2 and 1.0 <= seconds <= 1.5
+    assert GOAL_CHEER.stat().st_size < 200_000  # lightweight
 
 
-def test_goal_chime_plays_once_only_when_switched_on():
+def test_goal_cheer_plays_once_only_when_switched_on():
     at = AppTest.from_file(str(ROOT / "streamlit_app.py"), default_timeout=30)
+    at.session_state["mode"] = "Fan"  # Home is the landing view; these flows start in Fan Lens
     at.run()
     assert at.toggle(key="goal_sound").value is False
     next(b for b in at.button if b.label.startswith("Goal moment")).click().run()
@@ -192,6 +201,6 @@ def test_goal_chime_plays_once_only_when_switched_on():
         next(b for b in at.button if b.label == "Reset").click().run()
     at.toggle(key="goal_sound").set_value(True).run()
     next(b for b in at.button if b.label.startswith("Goal moment")).click().run()
-    assert len(at.get("audio")) == 1  # goals 0 -> 3: one chime
+    assert len(at.get("audio")) == 1  # goals 0 -> 3: one cheer
     at.radio(key="mode").set_value("Analyst").run()
     assert not at.get("audio") and not at.exception  # no new goal on the next run: no repeat

@@ -2,10 +2,14 @@
 from __future__ import annotations
 
 from html import escape
+from pathlib import Path
 
 import streamlit as st
+import streamlit.components.v2 as components_v2
 
 from . import analytics as A
+from .anim import LABEL as ANIM_LABEL
+from .anim import animation_figure
 from .explain import (
     ExplanationCache,
     build_request,
@@ -43,7 +47,12 @@ from .presentation import (
     window_label,
 )
 from .replay import DEMO_MOMENTS, Replay, clock_label
+from . import i18n as I
+from . import lab_ui as LUI
 from . import notes as N
+from .capture_ui import render_capture
+from .home_ui import render_home
+from .i18n import t as tr
 from . import threat as T
 from .story import DEFAULT_SPEED, SPEEDS, event_focus, match_read, speed_step, state_arc, story_moments
 from .validator import CONFIG_PATH, load_json, load_match
@@ -74,6 +83,13 @@ THREAT_VIEW_NOTES = {
 PITCH_NOTE = "Schematic: zone × lane positions, not tracking data; curves show the action type."
 TACTICAL_NOTE = "Five-lane grid (wing · half-space · centre) is a reference overlay; events carry three lanes."
 PLOT_CONFIG = {"displayModeBar": False}
+PITCH_VIEWS = ("Static", "Animated")
+LENSES = ["Home", "Fan", "Analyst", "Capture"]
+# Reports the browser's prefers-reduced-motion setting (no other data leaves the page).
+MOTION = components_v2.component(
+    "shiftlens_motion",
+    js="export default function(c){ const q = window.matchMedia('(prefers-reduced-motion: reduce)');"
+       " c.setStateValue('reduce', !!q.matches); }")
 SUMMARY_ICONS = {"Shots": "⚽", "On target": "🎯", "Saves": "🧤", "Corners": "🚩", "Fouls": "⚠️",
                  "Yellow cards": "🟨", "Red cards": "🟥", "Passes": "↗️", "Unsuccessful passes": "✖️",
                  "Attacking actions": "🔥"}
@@ -131,6 +147,7 @@ h1 { position: absolute !important; width: 1px; height: 1px; overflow: hidden; c
 .sl-banner { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 0.3rem 0.9rem;
   border-radius: 0.9rem; background: var(--sl-banner); border: 1px solid var(--sl-border); box-shadow: var(--sl-shadow); }
 .sl-banner .tag { color: var(--sl-muted); font-size: 0.82rem; }
+.sl-banner > div:last-child { min-width: 0; } .sl-banner .sl-chip { white-space: normal; }
 .sl-chip { display: inline-block; padding: 0.15rem 0.6rem; margin-left: 0.35rem; border-radius: 999px; font-size: 0.74rem;
   border: 1px solid var(--sl-border); color: var(--sl-text); background: var(--sl-row); white-space: nowrap; }
 .sl-chip.lens { border-color: var(--sl-accent); color: var(--sl-accent); font-weight: 700; }
@@ -174,7 +191,7 @@ h1 { position: absolute !important; width: 1px; height: 1px; overflow: hidden; c
 .sl-kpi-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 0.5rem;
   margin-bottom: 1rem; }  /* auto-fill keeps empty tracks, so hidden cards never stretch the rest */
 .sl-kpi-grid .sl-kpi { height: 66px; }
-.st-key-goal_chime { display: none; }
+.st-key-goal_cheer { display: none; }
 .sl-panel-title { font-weight: 700; font-size: 0.95rem; color: var(--sl-text); margin-bottom: 0.2rem; }
 .sl-panel-title .acc { color: var(--sl-accent); font-weight: 500; font-size: 0.8rem; }
 table.sl-stats { width: 100%%; border-collapse: collapse; font-size: 0.88rem; color: var(--sl-text); }
@@ -184,6 +201,15 @@ table.sl-stats .lbl { color: var(--sl-muted); font-size: 0.78rem; white-space: n
 table.sl-stats .lead { font-weight: 800; color: var(--sl-accent); }
 table.sl-stats th.home { color: var(--sl-home); } table.sl-stats th.away { color: var(--sl-away); }
 .sl-moment { font-size: 0.85rem; line-height: 1.35; color: var(--sl-text); }
+.st-key-motion_probe { position: absolute !important; height: 0 !important; overflow: hidden !important; }
+.sl-home { text-align: center; padding: 0.6rem 0 0.4rem; }
+.sl-home-claim { margin: 0.6rem 0 0.2rem; }
+.sl-home-sub { max-width: 46rem; margin: 0 auto 0.5rem !important; color: var(--sl-muted); }
+.sl-flow { display: flex; flex-wrap: wrap; align-items: stretch; gap: 0.4rem; }
+.sl-flow .arrow { align-self: center; color: var(--sl-accent); font-weight: 700; }
+.sl-flow-step { flex: 1 1 160px; border: 1px solid var(--sl-accent); border-radius: 10px; padding: 0.5rem 0.65rem; font-size: 0.85rem; line-height: 1.3; }
+ol.sl-trace { font-size: 0.78rem; line-height: 1.3; padding-left: 1.1rem; margin: 0; overflow-wrap: anywhere; }
+ol.sl-trace li { margin-bottom: 0.3rem; } ol.sl-trace code { font-size: 0.72rem; }
 [data-testid="stCaptionContainer"], [data-testid="stCaptionContainer"] p { color: var(--sl-muted) !important; }
 .sl-chain { display: flex; gap: 0.25rem; align-items: center; flex-wrap: wrap; justify-content: flex-end; margin-top: 0.3rem; }
 .sl-chain .step { font-size: 0.7rem; padding: 0.1rem 0.5rem; border-radius: 0.4rem; color: var(--sl-text);
@@ -297,7 +323,7 @@ def _clear_focus() -> None:
 
 
 def _mode() -> str:
-    return st.session_state.get("mode", "Fan").lower()
+    return st.session_state.get("mode", "Home").lower()
 
 
 def on_play():
@@ -380,27 +406,13 @@ def render_display_controls() -> None:
         st.caption("Overlay density only. Positions stay schematic (zone × lane), never tracking.")
 
 
-@st.cache_resource
-def goal_chime_wav() -> bytes:
-    """A 0.7 s two-note chime generated in code (no asset file, no network): 16-bit mono WAV, gentle fade."""
-    import io
-    import math
-    import struct
-    import wave
+GOAL_CHEER = Path(__file__).parent / "assets" / "goal_cheer.wav"
 
-    rate, notes, out = 22050, ((880.0, 0.18), (1318.5, 0.5)), bytearray()
-    for freq, length in notes:
-        n = int(rate * length)
-        for i in range(n):
-            env = min(1.0, i / (0.01 * rate)) * (1 - i / n) ** 2  # quick attack, soft decay
-            out += struct.pack("<h", int(0.32 * 32767 * env * math.sin(2 * math.pi * freq * i / rate)))
-    buf = io.BytesIO()
-    with wave.open(buf, "wb") as w:
-        w.setnchannels(1)
-        w.setsampwidth(2)
-        w.setframerate(rate)
-        w.writeframes(bytes(out))
-    return buf.getvalue()
+
+@st.cache_resource
+def goal_cheer_wav() -> bytes:
+    """1.5 s crowd-cheer excerpt (Pixabay Content License), trimmed to the eruption with short fades; bundled."""
+    return GOAL_CHEER.read_bytes()
 
 
 def _notes() -> list[dict]:
@@ -550,28 +562,31 @@ def _selected_move(replay: Replay, snap: dict) -> tuple[dict | None, list[dict],
 # --- sections ----------------------------------------------------------------
 
 def render_banner(theme: str, analyst: bool) -> None:
-    """Brand row (scrolls away): logo, lens chip, value chain, and the session settings: replay speed and lens."""
-    lens = "📋 Analyst Lens · tactical desk" if analyst else "📺 Fan Lens · broadcaster companion"
+    """Brand row (scrolls away): logo, lens chip, value chain, and the session settings: language, replay speed,
+    lens (Fan / Analyst / Capture · planned) and goal sound."""
+    lens = tr({"analyst": "chip.analyst", "capture": "chip.capture", "home": "chip.home"}.get(_mode(), "chip.fan"))
     chain = '<span class="arrow">→</span>'.join(
         f'<span class="step" title="{escape(tip)}"><b>{i}</b> {name}</span>'
         for i, (name, tip) in enumerate(VALUE_CHAIN, 1))
     with st.container(key="brand_row"):
-        c_brand, c_speed, c_lens, c_sound = st.columns([4.4, 1.5, 1.6, 0.9], vertical_alignment="center")
+        c_brand, c_speed, c_lens, c_lang = st.columns([3.5, 1.9, 2.3, 1.3], vertical_alignment="center")
+        c_sound = c_lang  # language and goal sound share the last column (stacked)
         c_brand.markdown(
             f'<div class="sl-banner"><div>{_crop("lockup_dark" if theme == "dark" else "lockup_light", 48)}</div>'
             f'<div style="text-align:right"><div><span class="sl-chip lens">{lens}</span>'
-            f'<span class="sl-chip">Synthetic Premier League-style scenario · simulated replay · fictional clubs</span>'
+            f'<span class="sl-chip">{tr("chip.synthetic")}</span>'
             f'</div><div class="sl-chain">{chain}</div></div></div>',
             unsafe_allow_html=True)
         if not st.session_state.get("speed"):  # default, and re-select 1x if the active option was clicked off
             st.session_state["speed"] = DEFAULT_SPEED
-        c_speed.segmented_control("Speed", list(SPEEDS), key="speed",
-                                  help="Replay speed. 1x = 10 simulated seconds per real second.")
-        c_lens.radio("Lens", ["Fan", "Analyst"], key="mode", horizontal=True, format_func=lambda m: f"{m} Lens",
-                     help="Fan Lens: a broadcaster companion. Analyst Lens: a tactical desk with references, "
-                          "move breakdowns, proxy analytics and full traceability.")
-        c_sound.toggle("🔔 Goal", key="goal_sound", value=False,
-                       help="Play a short chime when a goal happens in the replay. Off by default; some browsers "
+        I.render_switcher(c_lang)
+        c_speed.segmented_control(tr("speed.label"), list(SPEEDS), key="speed", help=tr("speed.help"))
+        if st.session_state.get("mode") not in LENSES:
+            st.session_state["mode"] = "Home"
+        c_lens.radio(tr("lens.label"), LENSES, key="mode", horizontal=True,
+                     format_func=lambda m: tr(f"lens.{m}"), help=tr("lens.help"))
+        c_sound.toggle(tr("sound.label"), key="goal_sound", value=False,
+                       help="Play a short crowd cheer when a goal happens in the replay. Off by default; some browsers "
                             "only allow sound after you have clicked on the page.")
 
 
@@ -581,8 +596,9 @@ def render_control_bar(replay: Replay, snap: dict, state, analyst: bool, theme: 
     are set in the brand row above, so the pinned part stays small in every browser."""
     home, away = _teams(replay)
     score = snap["metrics"]["score"]["value"]
-    half = "1st half" if snap["period"] == 1 else "2nd half"
-    status = "▶ Playing" if state.playing else ("🏁 Full time" if state.clock >= state.duration else "⏸ Paused")
+    half = tr(f"half.{snap['period']}")
+    status = tr("status.playing" if state.playing else "status.full_time" if state.clock >= state.duration
+                else "status.paused")
     with st.container(key="control_bar"):
         c_logo, c_score, c_play, c_pause, c_reset = st.columns([0.75, 3.6, 1, 1, 1], vertical_alignment="center")
         c_logo.markdown(f'<div class="sl-brandmark" title="ShiftLens">'
@@ -593,12 +609,12 @@ def render_control_bar(replay: Replay, snap: dict, state, analyst: bool, theme: 
             f'<span class="goals">{score[home["id"]]} – {score[away["id"]]}</span>'
             f'<span class="team away">{escape(away["name"])}</span></div>'
             f'<div class="sl-clock"><b>⏱ {snap["clock"]}</b> / {clock_label(replay.duration)} · {half} · {status}'
-            f'<span class="extra"> · {"Analyst Lens" if analyst else "Fan Lens"}</span></div>', unsafe_allow_html=True)
-        c_play.button("Play", icon=":material/play_arrow:", on_click=on_play, width="stretch",
+            f'<span class="extra"> · {tr("lens.Analyst" if analyst else "lens.Fan")}</span></div>', unsafe_allow_html=True)
+        c_play.button(tr("ctl.play"), icon=":material/play_arrow:", on_click=on_play, width="stretch",
                       disabled=state.playing or state.clock >= state.duration)
-        c_pause.button("Pause", icon=":material/pause:", on_click=on_pause, disabled=not state.playing,
+        c_pause.button(tr("ctl.pause"), icon=":material/pause:", on_click=on_pause, disabled=not state.playing,
                        width="stretch")
-        c_reset.button("Reset", icon=":material/replay:", on_click=on_reset, width="stretch")
+        c_reset.button(tr("ctl.reset"), icon=":material/replay:", on_click=on_reset, width="stretch")
     with st.container(key="clock_strip"):  # not sticky: scrubbing and jumps live here and scroll away
         moments = DEMO_MOMENTS.get(replay.match["match_id"], ())
         c_clock, *c_moments = st.columns([3.4] + [1.25] * len(moments), vertical_alignment="center")
@@ -607,8 +623,8 @@ def render_control_bar(replay: Replay, snap: dict, state, analyst: bool, theme: 
                               format_func=clock_label, on_change=on_seek, label_visibility="collapsed")
         icons = {"Momentum swing": ":material/swap_horiz:", "Goal moment": "⚽", "Late pressure": ":material/trending_up:"}
         for col, (label, seconds) in zip(c_moments, moments):
-            col.button(f"{label} ({clock_label(seconds)})", icon=icons.get(label), on_click=on_demo,
-                       args=(seconds,), width="stretch", help=f"Jump to {clock_label(seconds)} and pause")
+            col.button(f"{tr('moment.' + label)} ({clock_label(seconds)})", icon=icons.get(label), on_click=on_demo,
+                       args=(seconds,), width="stretch", help=tr("moment.help", clock=clock_label(seconds)))
 
 
 KPI_LABELS = {"pressure": "Pressure", "pass_share": "Pass share", "danger": "Danger index",
@@ -807,6 +823,13 @@ def render_key_moves(replay: Replay, snap: dict, analyst: bool):
         attack = {"team": names[move["team_id"]], "target": (away if right else home)["name"], "right": right,
                   "color": HOME_COLOR if right else AWAY_COLOR}
     disp = _display()
+    if st.session_state.get("pitch_view") not in PITCH_VIEWS:  # default, and re-select if clicked off
+        st.session_state["pitch_view"] = "Static"
+    st.segmented_control(tr("pitch.view"), PITCH_VIEWS, key="pitch_view", format_func=lambda v: tr("pitch." + v),
+                         help=tr("pitch.view_help"))
+    if st.session_state["pitch_view"] == "Animated":
+        render_animation(replay, events)
+        return move, events, points
     st.plotly_chart(pitch_figure(points, home, away, detailed=analyst, highlight=st.session_state.get("selected_event"),
                                  palette=_pal(), threat=gains, underlay=underlay, cell_labels=labels, attack=attack,
                                  guides=disp["guides"] if analyst else True, names=analyst and disp["labels"]),
@@ -814,6 +837,24 @@ def render_key_moves(replay: Replay, snap: dict, analyst: bool):
     st.caption((THREAT_VIEW_NOTES[view] + " Zone Threat is a fixed grid, not xT. " + TACTICAL_NOTE + " "
                 if analyst else "") + PITCH_NOTE)
     return move, events, points
+
+
+def render_animation(replay: Replay, events: list[dict]) -> None:
+    """The selected move as an animated sequence (chart-side controls only; the match clock never moves)."""
+    home, away = _teams(replay)
+    ids = [e["event_id"] for e in events if e.get("x") is not None]
+    sel = st.session_state.get("selected_event")
+    start = ids.index(sel) + 1 if sel in ids else 1
+    reduce = bool(st.session_state.get("reduce_motion"))
+    st.plotly_chart(animation_figure(events, replay.players, home, away, start_step=start, reduce_motion=reduce),
+                    config=PLOT_CONFIG, key="pitch_anim")
+    st.caption(ANIM_LABEL + (" · " + tr("pitch.reduced") if reduce else "") + " · " + tr("pitch.anim_note"))
+
+
+def render_motion_probe() -> None:
+    with st.container(key="motion_probe", height=1, border=False):
+        res = MOTION(key="motion", on_reduce_change=lambda: None)
+        st.session_state["reduce_motion"] = bool(getattr(res, "reduce", False))
 
 
 def render_move_card(replay: Replay, snap: dict, move: dict, events: list[dict], analyst: bool) -> None:
@@ -1069,7 +1110,7 @@ def render_explanation(replay: Replay, snap: dict, state) -> None:
 def render_notes(replay: Replay, state) -> None:
     """Analyst notes attached to the exact match clock; click a time to seek there (paused)."""
     notes = N.ordered(_notes())
-    _title("📝 Analyst notes", "attached to the match clock · kept for this session")
+    _title(tr("notes.title"), "attached to the match clock · kept for this session")
     with st.form("note_form", clear_on_submit=True, border=False):  # text and click are submitted together
         st.text_area("Note", key="note_text", height=68, max_chars=N.MAX_TEXT, label_visibility="collapsed",
                      placeholder=f"What do you see at Min {clock_label(state.clock)}?")
@@ -1219,6 +1260,8 @@ def render_workspace(replay: Replay, snap: dict, theme: str) -> None:
             render_summary(replay, snap)
         with c_flow:
             render_pressure(replay, snap, True, theme)
+        st.markdown(f"**{tr('xg.title')}**")
+        LUI.render_xg(replay, (home, away), colors, snap["at_seconds"], key="xg_analyst")
     with tabs[3]:
         render_proxies(replay, snap)
     with tabs[4]:
@@ -1261,6 +1304,26 @@ def render_traceability(replay: Replay, snap: dict) -> None:
 
 # --- page --------------------------------------------------------------------
 
+def render_panel(panel: str, replay: Replay, snap: dict, state) -> None:
+    """One side panel of the Analyst workspace (see lab_ui.PANELS)."""
+    teams = _teams(replay)
+    if panel == "log":
+        with st.container(border=True, height=330, key="analyst_log"):  # scrolls inside; full height on phones
+            render_match_story(replay, snap, "📋 Key moments log", 8, "Moments")
+        return
+    with st.container(border=True, key=f"panel_{panel}"):
+        if panel == "explain":
+            render_explanation(replay, snap, state)
+        elif panel == "notes":
+            render_notes(replay, state)
+        elif panel == "lab":
+            LUI.render_lab(replay, teams, state.clock)
+            LUI.render_download(replay, state.clock)
+        elif panel == "journal":
+            LUI.render_journal(replay, teams, state.clock)
+        elif panel == "agents":
+            LUI.render_agents(replay, snap, "analyst", state.playing, get_generator(), _cache())
+
 def render(dataset_path: str) -> None:
     st.set_page_config(page_title=PRODUCT_NAME, page_icon="⚽", layout="wide")
     analyst = _mode() == "analyst"
@@ -1280,6 +1343,22 @@ def render(dataset_path: str) -> None:
     if "replay_state" not in st.session_state:
         st.session_state["replay_state"] = replay.new_state()
     state = _state()
+    render_motion_probe()
+    if _mode() == "home":  # landing view: logo, value proposition, quick starts and the quick tour
+        state.pause()
+        render_banner(theme, analyst)
+        if I.lang() == "es":
+            st.caption(tr("i18n.note"))
+        render_home(_crop("lockup_dark" if theme == "dark" else "lockup_light", 120),
+                    dict(DEMO_MOMENTS.get(replay.match["match_id"], ())), on_demo)
+        return
+    if _mode() == "capture":  # planned space: no replay controls, nothing processed
+        state.pause()
+        render_banner(theme, analyst)
+        if I.lang() == "es":
+            st.caption(tr("i18n.note"))
+        render_capture(replay)
+        return
     snap = replay.snapshot(state.clock)
     goals_now = sum(1 for ev in snap["events"] if ev["type"] == "goal")
     goals_seen = st.session_state.get("_goals_seen")
@@ -1288,6 +1367,8 @@ def render(dataset_path: str) -> None:
     # 1. Brand, match state and controls (sticky), headline cards
     render_banner(theme, analyst)
     render_control_bar(replay, snap, state, analyst, theme)
+    if I.lang() == "es":
+        st.caption(tr("i18n.note"))
 
     if analyst:
         # 2a. Metric strip: only the cards the analyst keeps visible, with the menu at its right end
@@ -1296,23 +1377,24 @@ def render(dataset_path: str) -> None:
             render_kpis(replay, snap, analyst)
         with c_menu:
             render_kpi_menu()
-        # 2. Tactical workspace = the analytical surface (move, maps, stats & tide, proxy leaders, lineups);
-        #    the right rail holds the story: key moments log, analyst explanation, notes
-        c_work, c_rail = st.columns([2.45, 1.55], gap="medium")
+        # 2. Three columns: the tactical workspace (move, maps, stats & tide, proxy leaders, lineups) in the centre,
+        #    panels either side (key moments log, explanation, notes, Hypothesis Lab, Decision Journal, agents),
+        #    placed with the layout editor (session only)
+        sides = LUI.layout()
+        c_left, c_work, c_right = st.columns([1.2, 2.5, 1.3], gap="small")
         with c_work, st.container(border=True):
-            c_title, c_disp = st.columns([5, 1.2], vertical_alignment="center")
+            c_title, c_lay, c_disp = st.columns([2.6, 1.3, 1.3], vertical_alignment="center")
             with c_title:
-                _title("📋 Tactical workspace", "schematic · proxy-based · synthetic data")
+                _title(tr("sec.workspace"), tr("sec.workspace_sub"))
+            with c_lay:
+                LUI.render_layout_editor()
             with c_disp:
                 render_display_controls()
             render_workspace(replay, snap, theme)
-        with c_rail:
-            with st.container(border=True, height=330, key="analyst_log"):  # scrolls inside; full height on phones
-                render_match_story(replay, snap, "📋 Key moments log", 8, "Moments")
-            with st.container(border=True):
-                render_explanation(replay, snap, state)
-            with st.container(border=True):
-                render_notes(replay, state)
+        for col, side in ((c_left, "left"), (c_right, "right")):
+            with col:
+                for panel in sides[side]:
+                    render_panel(panel, replay, snap, state)
     else:
         # 2. Metrics as a slim stack on the left, pictures and numbers in the middle (key move · stats & pressure ·
         #    lineups), the story on the right; on phones the stack becomes a two-column grid above the pitch
@@ -1320,8 +1402,9 @@ def render(dataset_path: str) -> None:
         with c_kpi:
             render_kpis(replay, snap, analyst)
         with c_main, st.container(border=True):
-            _title("⚽ Key moments")
-            tab_move, tab_stats, tab_line = st.tabs(["⚽ Key move", "📊 Stats & pressure", "👥 Lineups"])
+            _title(tr("sec.key_moments"))
+            tab_move, tab_stats, tab_xg, tab_line = st.tabs([tr("tab.key_move"), tr("tab.stats_pressure"),
+                                                             tr("tab.xg"), tr("tab.lineups")])
             with tab_move:
                 move, events, points = render_key_moves(replay, snap, analyst=False)
                 if move:
@@ -1332,6 +1415,8 @@ def render(dataset_path: str) -> None:
                     render_summary(replay, snap, compact=True)
                 with c_flow:
                     render_pressure(replay, snap, analyst, theme, compact=True)
+            with tab_xg:
+                LUI.render_xg(replay, _teams(replay), _colors(replay), snap["at_seconds"], key="xg_fan")
             with tab_line:
                 render_lineups(replay, snap, analyst=False)
         with c_rail:
@@ -1339,9 +1424,11 @@ def render(dataset_path: str) -> None:
                 render_match_story(replay, snap, "📰 Match Story", 4, "Key moments")
             with st.container(border=True):
                 render_explanation(replay, snap, state)
+            with st.expander(tr("ag.title")):
+                LUI.render_agents(replay, snap, "fan", state.playing, get_generator(), _cache())
     if st.session_state.get("goal_sound") and goals_seen is not None and goals_now > goals_seen:
-        with st.container(key="goal_chime"):  # hidden player; rendered only in the run where a goal appears
-            st.audio(goal_chime_wav(), format="audio/wav", autoplay=True)
+        with st.container(key="goal_cheer"):  # hidden player; rendered only in the run where a goal appears
+            st.audio(goal_cheer_wav(), format="audio/wav", autoplay=True)
     # 4. Evidence
     render_timeline(replay, snap, analyst)
     render_traceability(replay, snap)

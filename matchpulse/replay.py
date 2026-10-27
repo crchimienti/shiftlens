@@ -16,9 +16,9 @@ from .validator import validate_config
 # comeback (no side overturns a deficit), so the third moment is "Late pressure".
 DEMO_MOMENTS = {
     "MP-DEMO-001": (
-        ("Momentum swing", 610),   # 10:10 swing towards Harbor City, equaliser at 10:05
-        ("Goal moment", 1221),     # 20:21 Northbridge FC late winner
-        ("Late pressure", 1180),   # 19:40 Northbridge FC pressing at 1-1
+        ("Momentum swing", 1000),  # 16:40 swing towards Harbor City while Northbridge FC control the half
+        ("Goal moment", 5060),     # 84:20 Northbridge FC late winner
+        ("Late pressure", 4650),   # 77:30 Northbridge FC pushing at 1-1
     ),
 }
 

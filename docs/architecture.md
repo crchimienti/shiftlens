@@ -28,6 +28,14 @@ optional model call is the only network path, and the app works without it.
 | Brand & themes | `static/brand/`, `.streamlit/config.toml`, `ui.THEMES` | Official logo files served unchanged (static serving) and cropped with CSS; native light/dark theme config; small isolated CSS for panels |
 | Story & lineups | `matchpulse/story.py`, `matchpulse/lineups.py`, `config/lineups.json` | Replay speed steps, factual story feed, card counts, event → move focus; synthetic presentation-only lineups and formations |
 | Presentation | `matchpulse/presentation.py`, `matchpulse/pitch.py` | Plain-language labels, match-summary counts, schematic pitch positions (zone × lane), key-move chain and stats, Plotly figures. No new metrics |
+| Agents | `matchpulse/agents.py` | FanStoryAgent and TacticalAnalystAgent orchestrate deterministic tools; EvidenceGuardrail (deterministic validator) checks every output and recomputes lab values from raw event IDs; optional Azure AI Foundry drafts only |
+| Hypothesis Lab & Decision Journal | `matchpulse/lab.py`, `matchpulse/lab_ui.py` | Window comparisons per team and measure (pressures, shots, synthetic xG, attacking actions, box actions, pass share) with supported / not supported / inconclusive / pending verdicts; session-only records with JSON download |
+| xG evolution | `matchpulse/xg.py` | Cumulative synthetic xG per team up to the clock |
+| Language | `matchpulse/i18n.py` | EN / ES display catalog (canonical data and validation stay English) |
+| Capture (planned) | `matchpulse/capture_ui.py` | Badged roadmap space: product flow, wireframe (disabled upload, time sync, mock review queue), planned data contract |
+| Animated player | `matchpulse/anim.py` | One move as Plotly animation frames on the synthetic coordinates (Play / Pause / Restart, step slider, reduced motion); never moves the match clock |
+| Home & tour | `matchpulse/home_ui.py` | Landing view (logo, claim, quick starts) and the three-step Quick tour |
+| Generator | `tools/build_match.py` | Seeded, byte-reproducible synthetic 90-minute match |
 | UI | `matchpulse/ui.py`, `streamlit_app.py` | Single page: scoreboard + summary, controls, KPIs, pressure, territory, key move on the pitch, explanation, event list, traceability (Fan Lens: behind an expander) |
 
 `matchpulse/` modules other than `ui.py` have no Streamlit dependency and are unit-tested directly.
@@ -101,16 +109,34 @@ key point carries `metric_refs` and `event_refs`, which are validated against th
 status line shows the source (deterministic fallback, Foundry, or cached), the validated status, the number
 of metric and event references, attempts and latency.
 
+## Agent architecture (Microsoft AI / Azure AI Foundry-aligned)
+`matchpulse/agents.py` organises the explanation work as three named agents with explicit tools and a visible trace
+(the **🤖 Agent architecture** panel shows who did what for the paused second):
+
+| Agent | Tools it orchestrates | What it returns |
+|---|---|---|
+| **FanStoryAgent** | `match_read`, `story_moments`, fan explanation | one contextual summary of the moment for the Fan Lens |
+| **TacticalAnalystAgent** | Hypothesis Lab evaluation, Decision Journal review, analyst explanation, evidence audit | verdicts, the analyst read and the source events behind every referenced metric |
+| **EvidenceGuardrail** | `validate_explanation`, recompute-from-event-IDs, event-reference check | pass / reject; rejected drafts are retried once, then replaced by the deterministic fallback |
+
+- **Deterministic by default.** Offline, every tool is a Python rule and no model is called; the UI says
+  "Deterministic mode". The guardrail is a validator, not AI.
+- **Optional Azure AI Foundry path.** When `MATCHPULSE_OFFLINE=0` and the Azure variables are set, agents may draft
+  wording with the model (`foundry_client.py`); every draft still has to pass the EvidenceGuardrail, which checks each
+  number, clock and event ID against the snapshot and recomputes lab values from their raw event IDs.
+- **No look-ahead.** Agents only see events up to the replay clock; lab and journal windows that end later are pending.
+
 ## Demo moments
 
-Three buttons jump to known timestamps in the demo match and pause there: Momentum swing (10:10),
-Goal moment (20:21) and Late pressure (19:40). They only call `ReplayState.jump_to` and clear any
+Three buttons jump to known timestamps in the demo match and pause there: Momentum swing (16:40),
+Goal moment (84:20) and Late pressure (77:30). They only call `ReplayState.jump_to` and clear any
 explanation already on screen. Metrics are unchanged, and tests check that each moment shows what its
 label claims. The match has no genuine comeback, so the third button is "Late pressure".
 
 ## Non-goals for the MVP
 
 Real match data or live feeds · real-time ingestion · predictions, betting or win probabilities ·
-xG or tracking data · free-form chat or continuous narration · accounts, auth or multi-user state ·
-databases · cloud hosting (App Service, Container Apps, AKS) · agents or multi-agent orchestration ·
+provider xG or tracking data (the xG field is synthetic) · free-form chat or continuous narration · accounts, auth or multi-user state ·
+databases · cloud hosting (App Service, Container Apps, AKS) · autonomous agents (the agents here only
+orchestrate deterministic tools behind a guardrail) · video processing (Capture is a planned wireframe) ·
 Fabric / Eventstream · charts (planned, see the [README roadmap](../README.md#roadmap)).

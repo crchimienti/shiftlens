@@ -28,7 +28,7 @@ def replay():
 
 @pytest.fixture(scope="module")
 def full(replay):
-    return replay.snapshot(1320)
+    return replay.snapshot(5400)
 
 
 # --- speed ---------------------------------------------------------------------
@@ -38,15 +38,15 @@ def test_speed_step(label, step):
     assert speed_step(label) == step
 
 
-@pytest.mark.parametrize("label, ticks", [("0.5x", 264), ("1x", 132), ("1.5x", 88), ("2x", 66)])
+@pytest.mark.parametrize("label, ticks", [("0.5x", 1080), ("1x", 540), ("1.5x", 360), ("2x", 270), ("4x", 135)])
 def test_full_playthrough_at_each_speed_is_deterministic(label, ticks):
-    state = ReplayState(duration=1320)
+    state = ReplayState(duration=5400)
     state.play()
     n = 0
     while state.playing:
         state.tick(speed_step(label))
         n += 1
-    assert (n, state.clock) == (ticks, 1320)
+    assert (n, state.clock) == (ticks, 5400)
 
 
 # --- lineups -------------------------------------------------------------------
@@ -99,13 +99,13 @@ def test_story_moments_are_factual_and_latest_first(replay, full):
     moments = story_moments(full, replay.match, replay.players)
     assert [m["seconds"] for m in moments] == sorted((m["seconds"] for m in moments), reverse=True)
     goals = [m["text"] for m in moments if m["kind"] == "goal"]
-    assert goals == ["GOAL — Adrian Novak (Northbridge FC), set up by Samuel Adeyemi's pass",
+    assert goals == ["GOAL — Adrian Novak (Northbridge FC), set up by Samuel Adeyemi's cross",
                      "GOAL — Daniel Kowalski (Harbor City), set up by Felix Brandt's corner",
-                     "GOAL — Marcus Lindqvist (Northbridge FC), set up by Diego Varela's cross"]
-    assert any(m["text"] == "Chance — Adrian Novak (Northbridge FC), saved by Pavel Horvat" for m in moments)
+                     "GOAL — Marcus Lindqvist (Northbridge FC), set up by Adrian Novak's pass"]
+    assert any(m["text"] == "Chance — Marcus Lindqvist (Northbridge FC), saved by Pavel Horvat" for m in moments)
     turning = next(m for m in moments if m["kind"] == "turning")
     assert "Northbridge FC" in turning["text"] and turning["sequence_id"]
-    assert all(m["seconds"] <= 1320 for m in moments)
+    assert all(m["seconds"] <= 5400 for m in moments)
 
 
 def test_story_has_no_future_events(replay):
@@ -127,21 +127,21 @@ def test_match_summary_has_card_rows(replay, full):
 
 
 def test_event_focus(full):
-    assert event_focus(full, "E040") == "S09" and event_focus(full, "E999") is None
+    assert event_focus(full, "E0990") == "S216" and event_focus(full, "E999") is None
 
 
 # --- pitch upgrades --------------------------------------------------------------
 
 def test_corners_sit_at_the_flag(replay, full):
     assert corner_xy("right", True) == (99, 3) and corner_xy("right", False) == (1, 97)
-    pts = move_points(move_events(full, "S13"), "NBR", replay.players, replay.config)
+    pts = move_points(move_events(full, "S093"), "NBR", replay.players, replay.config)
     corner = next(p for p in pts if p["type"] == "corner")
     assert (corner["x"], corner["y"]) == (1, 97)  # Harbor City attack right → left, right-lane flag
 
 
 def test_analyst_pitch_has_five_lane_grid_fan_pitch_is_clean(replay, full):
     home, away = replay.match["home_team"], replay.match["away_team"]
-    pts = move_points(move_events(full, "S09"), "NBR", replay.players, replay.config)
+    pts = move_points(move_events(full, "S216"), "NBR", replay.players, replay.config)
     tactical = pitch_figure(pts, home, away, detailed=True)
     lanes = [s for s in tactical.layout.shapes if s.type == "line" and s.line.dash == "dash" and s.x0 == 0]
     assert sorted(s.y0 for s in lanes) == list(FIVE_LANES[1:-1])
@@ -152,16 +152,16 @@ def test_analyst_pitch_has_five_lane_grid_fan_pitch_is_clean(replay, full):
 
 def test_highlight_rings_the_selected_event(replay, full):
     home, away = replay.match["home_team"], replay.match["away_team"]
-    pts = move_points(move_events(full, "S09"), "NBR", replay.players, replay.config)
-    fig = pitch_figure(pts, home, away, highlight="E040")
+    pts = move_points(move_events(full, "S216"), "NBR", replay.players, replay.config)
+    fig = pitch_figure(pts, home, away, highlight="E0990")
     ring = next(t for t in fig.data if t.name == "Selected action")
-    goal = next(p for p in pts if p["event_id"] == "E040")
+    goal = next(p for p in pts if p["event_id"] == "E0990")
     assert (ring.x[0], ring.y[0]) == (goal["x"], goal["y"])
 
 
 def test_off_target_shot_flies_past_the_post(replay, full):
     home, away = replay.match["home_team"], replay.match["away_team"]
-    pts = move_points(move_events(full, "S03"), "NBR", replay.players, replay.config)
+    pts = move_points(move_events(full, "S005"), "NBR", replay.players, replay.config)
     fig = pitch_figure(pts, home, away)
     assert any(s.type == "line" and s.line.dash == "dash" and s.x1 == 101 for s in fig.layout.shapes)
 
@@ -174,6 +174,7 @@ def button(at, prefix):
 
 def test_ui_speed_story_lineups_and_lenses():
     at = AppTest.from_file(str(ROOT / "streamlit_app.py"), default_timeout=30)
+    at.session_state["mode"] = "Fan"  # Home is the landing view; these flows start in Fan Lens
     at.run()
     assert at.session_state["speed"] == "1x"
     button(at, "Goal moment").click().run()

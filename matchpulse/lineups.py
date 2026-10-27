@@ -24,9 +24,18 @@ def formation_lines(formation: str) -> list[int]:
     return [int(n) for n in formation.split("-")]
 
 
+def starters(team: dict) -> list[dict]:
+    """The starting eleven (players without a `starter` flag count as starters: older single-squad data)."""
+    return [p for p in team["players"] if p.get("starter", True)]
+
+
+def bench(team: dict) -> list[dict]:
+    return [p for p in team["players"] if not p.get("starter", True)]
+
+
 def fallback_lineup(team: dict) -> dict:
-    """Group players by position, ordered by shirt number; formation label from the group sizes."""
-    groups = {p: sorted((pl for pl in team["players"] if pl["position"] == p), key=lambda pl: pl["number"])
+    """Group starters by position, ordered by shirt number; formation label from the group sizes."""
+    groups = {p: sorted((pl for pl in starters(team) if pl["position"] == p), key=lambda pl: pl["number"])
               for p in POSITION_ORDER}
     lines = [[pl["id"] for pl in groups[p]] for p in POSITION_ORDER if groups[p]]
     return {"formation": "-".join(str(len(line)) for line in lines[1:]), "lines": lines}
@@ -38,12 +47,12 @@ def team_lineup(match: dict, team: dict, lineups: dict) -> dict:
 
 
 def lineup_errors(match: dict, lineups: dict) -> list[str]:
-    """Each team: formation matches the outfield lines, every player appears exactly once, one goalkeeper line."""
+    """Each team: formation matches the outfield lines, every starter appears exactly once, one goalkeeper line."""
     errors = []
     for team in (match["home_team"], match["away_team"]):
         lineup = team_lineup(match, team, lineups)
         ids = [pid for line in lineup["lines"] for pid in line]
-        roster = {p["id"] for p in team["players"]}
+        roster = {p["id"] for p in starters(team)}
         if sorted(ids) != sorted(roster):
             errors.append(f"{team['id']}: lineup players do not match the roster")
         if len(lineup["lines"][0]) != 1:

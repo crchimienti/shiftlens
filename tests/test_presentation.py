@@ -66,7 +66,7 @@ def test_match_summary_counts():
 
 
 def test_match_summary_full_time_is_consistent_with_score(replay):
-    snap = replay.snapshot(1320)
+    snap = replay.snapshot(5400)
     s = match_summary(snap["events"], ("NBR", "HBC"), replay.config["attacking_zones"])
     goals = snap["metrics"]["score"]["value"]
     for team in ("NBR", "HBC"):
@@ -76,13 +76,13 @@ def test_match_summary_full_time_is_consistent_with_score(replay):
 
 @pytest.mark.parametrize("mode", ["fan", "analyst"])
 def test_friendly_trace_rows_keep_keys_and_counts(replay, mode):
-    metrics = replay.snapshot(674)["metrics"]
+    metrics = replay.snapshot(2520)["metrics"]
     raw = traceability_rows(metrics, mode)
     nice = friendly_trace_rows(raw, metrics, {"NBR": "Northbridge FC", "HBC": "Harbor City"})
     assert [set(r) for r in nice] == [set(r) for r in raw]
     assert [r["sources"] for r in nice] == [r["sources"] for r in raw]
     by_metric = {r["metric"]: r for r in nice}
-    assert by_metric["Momentum"]["value"] == "-0.82 (Harbor City on top)"
-    assert by_metric["Pass share"]["value"] == "NBR 60% · HBC 40%"
-    assert by_metric["Evidence level"]["value"] == "High (28 events)"
-    assert by_metric["Momentum"]["window"] == "08:14–11:14 (last 3 min)"
+    assert by_metric["Momentum"]["value"] == "-0.90 (Harbor City on top)"
+    assert by_metric["Pass share"]["value"] == "NBR 15% · HBC 85%"
+    assert by_metric["Evidence level"]["value"] == "High (47 events)"
+    assert by_metric["Momentum"]["window"] == "39:00–42:00 (last 3 min)"

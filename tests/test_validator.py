@@ -31,8 +31,9 @@ def test_sample_dataset_is_valid(match):
     assert validate_match(match) == []
 
 
-def test_sample_duration_in_summary_range(match):
-    assert 18 <= match["duration_minutes"] <= 24
+def test_sample_is_a_full_90_minute_match(match):
+    assert match["duration_minutes"] == 90
+    assert {e["period"] for e in match["events"]} == {1, 2}
 
 
 def test_sample_config_is_valid():
@@ -63,7 +64,7 @@ def test_missing_sequence_id_rejected(match):
 
 
 def test_duration_out_of_range_rejected(match):
-    match["duration_minutes"] = 90
+    match["duration_minutes"] = 121
     assert_error(match, "duration_minutes")
 
 

@@ -6,9 +6,9 @@
 | Step | Click | Say |
 |---|---|---|
 | 1 | — | "ShiftLens turns match events into explainable intelligence: Python owns the numbers, and every explanation is checked." |
-| 2 | **Fan Lens**, **Play**, then **Momentum swing (10:10)** | "This is a synthetic, Premier League-style match with fictional clubs. Match Story says the game is shifting; the pitch shows the move behind it." |
+| 2 | **Fan Lens**, **Play**, then **Momentum swing (16:40)** | "This is a synthetic, Premier League-style match with fictional clubs. Match Story says the game is shifting; the pitch shows the move behind it." |
 | 3 | (paused) | "Live Story explains this moment by itself, validated ✓. Data limits are one line below." |
-| 4 | **Goal moment (20:21)** | "⚽ GOAL!, with the scorer and who set it up, straight from the event chain. The lineups tab shows the badges." |
+| 4 | **Goal moment (84:20)** | "⚽ GOAL!, with the scorer and who set it up, straight from the event chain. The lineups tab shows the badges." |
 | 5 | **Analyst Lens** | "The tactical desk: shot map, pass network, a team or player activity map, proxy leaders and the tide of the game." |
 | 6 | **Explain this moment** | "A tactical read: who carries the threat, who keeps the ball, and a coaching takeaway, with every number referenced." |
 | 7 | Traceability | "Formula, window and source events behind every number. Nothing is made up." |

@@ -19,7 +19,7 @@ from matchpulse.metrics import event_time
 from matchpulse.replay import DEMO_MOMENTS, Replay, ReplayState
 from matchpulse.validator import CONFIG_PATH, ROOT, load_json, load_match
 
-AT = 674  # 11:14 - score 1-1, pass share NBR 60.0 / HBC 40.0, danger NBR 1.50 / HBC 6.23
+AT = 2400  # 40:00 - score 1-1, pass share NBR 45.83 / HBC 54.17, danger NBR 0.86 / HBC 4.31
 
 
 @pytest.fixture(scope="module")
@@ -42,8 +42,8 @@ def with_point(out, text, metric_refs, event_refs=()):
 
 def test_snapshot_values_assumed_by_these_tests(analyst):
     m = analyst[0]["metrics"]
-    assert m["danger_score"]["value"] == {"NBR": 1.5, "HBC": 6.23}
-    assert m["pass_share"]["value"] == {"NBR": 60.0, "HBC": 40.0}
+    assert m["danger_score"]["value"] == {"NBR": 0.86, "HBC": 4.31}
+    assert m["pass_share"]["value"] == {"NBR": 45.83, "HBC": 54.17}
     assert m["score"]["value"] == {"NBR": 1, "HBC": 1}
 
 
@@ -51,35 +51,35 @@ def test_snapshot_values_assumed_by_these_tests(analyst):
 
 def test_valid_metric_backed_claim(analyst):
     r, out = analyst
-    out = with_point(out, "Danger score: Northbridge FC 1.50, Harbor City 6.23.", ["danger_score"], ["E061"])
+    out = with_point(out, "Danger score: Northbridge FC 0.86, Harbor City 4.31.", ["danger_score"], ["E0460"])
     assert validate_explanation(out, r) == []
 
 
 def test_number_from_unrelated_metric_rejected(analyst):
     r, out = analyst
-    out = with_point(out, "Harbor City are pushing, danger 6.23.", ["momentum"])
+    out = with_point(out, "Harbor City are pushing, danger 4.31.", ["momentum"])
     errors = validate_explanation(out, r)
-    assert any("'6.23' is not attributable to ['momentum']" in e for e in errors), errors
+    assert any("'4.31' is not attributable to ['momentum']" in e for e in errors), errors
 
 
 def test_team_values_swapped_within_metric_rejected(analyst):
     r, out = analyst
-    out = with_point(out, "Danger score: Northbridge FC 6.23, Harbor City 1.50.", ["danger_score", "pass_share"])
+    out = with_point(out, "Danger score: Northbridge FC 4.31, Harbor City 0.86.", ["danger_score", "pass_share"])
     errors = validate_explanation(out, r)
-    assert any("'6.23' is written for Northbridge FC but belongs to Harbor City" in e for e in errors), errors
-    assert any("'1.50' is written for Harbor City but belongs to Northbridge FC" in e for e in errors), errors
+    assert any("'4.31' is written for Northbridge FC but belongs to Harbor City" in e for e in errors), errors
+    assert any("'0.86' is written for Harbor City but belongs to Northbridge FC" in e for e in errors), errors
 
 
 def test_team_value_swapped_across_referenced_metrics_rejected(analyst):
     r, out = analyst
-    out = with_point(out, "Harbor City have 60.0% of passes and danger 1.50.", ["pass_share", "danger_score"])
+    out = with_point(out, "Harbor City have 45.83% of passes and danger 0.86.", ["pass_share", "danger_score"])
     errors = validate_explanation(out, r)
-    assert any("'60.0' is written for Harbor City" in e for e in errors), errors
+    assert any("'45.83' is written for Harbor City" in e for e in errors), errors
 
 
 def test_valid_score_and_minute_claim(analyst):
     r, out = analyst
-    out = with_point(out, "Northbridge FC and Harbor City are level at 1–1 in minute 11.", ["score"])
+    out = with_point(out, "Northbridge FC and Harbor City are level at 1–1 in minute 40.", ["score"])
     assert validate_explanation(out, r) == []
 
 
@@ -92,12 +92,12 @@ def test_valid_text_without_numbers(analyst):
 
 def test_invalid_metric_and_event_refs_rejected(analyst):
     r, out = analyst
-    out = with_point(out, "Harbor City are pressing.", ["xg"], ["E104", "E999"])
+    out = with_point(out, "Harbor City are pressing.", ["xg"], ["E1000", "E9999"])
     errors = validate_explanation(out, r)
     assert any("unknown metric 'xg'" in e for e in errors)
     assert any("needs at least one metric_ref that is a valid metric" in e for e in errors)
-    assert any("'E104' is not a visible event" in e for e in errors)   # future
-    assert any("'E999' is not a visible event" in e for e in errors)   # nonexistent
+    assert any("'E1000' is not a visible event" in e for e in errors)   # future
+    assert any("'E9999' is not a visible event" in e for e in errors)   # nonexistent
 
 
 def test_fan_key_point_needs_metric_ref(replay):
@@ -108,7 +108,7 @@ def test_fan_key_point_needs_metric_ref(replay):
 
 def test_unverifiable_online_claim_retries_then_falls_back(analyst):
     r, out = analyst
-    swapped = with_point(out, "Danger score: Northbridge FC 6.23, Harbor City 1.50.", ["danger_score"])
+    swapped = with_point(out, "Danger score: Northbridge FC 4.31, Harbor City 0.86.", ["danger_score"])
     calls = []
     gen = lambda req, prev: calls.append(prev) or swapped
     result = explain(r, gen)
@@ -214,10 +214,10 @@ def test_demo_moments_point_at_what_they_claim(replay):
 
 
 def test_jump_to_pauses_and_is_deterministic(replay):
-    state = ReplayState(duration=1320, clock=100, playing=True)
-    state.jump_to(610)
-    assert (state.clock, state.playing) == (610, False)
-    assert replay.snapshot(610) == replay.snapshot(state.clock)
+    state = ReplayState(duration=5400, clock=100, playing=True)
+    state.jump_to(1000)
+    assert (state.clock, state.playing) == (1000, False)
+    assert replay.snapshot(1000) == replay.snapshot(state.clock)
 
 
 # --- UI (AppTest, offline) --------------------------------------------------
@@ -228,11 +228,12 @@ def button(at, prefix):
 
 def test_ui_demo_moment_cache_and_reset():
     at = AppTest.from_file(str(ROOT / "streamlit_app.py"), default_timeout=30)
+    at.session_state["mode"] = "Fan"  # Home is the landing view; these flows start in Fan Lens
     at.run()
     button(at, "Play").click().run()
     button(at, "Momentum swing").click().run()
     state = at.session_state["replay_state"]
-    assert (state.clock, state.playing) == (610, False)
+    assert (state.clock, state.playing) == (1000, False)
     assert "explanation" not in at.session_state
 
     button(at, "Explain this moment").click().run()
@@ -243,7 +244,7 @@ def test_ui_demo_moment_cache_and_reset():
     assert any("cached (deterministic fallback)" in c.value for c in at.caption)
 
     button(at, "Goal moment").click().run()
-    assert at.session_state["replay_state"].clock == 1221 and "explanation" not in at.session_state
+    assert at.session_state["replay_state"].clock == 5060 and "explanation" not in at.session_state
 
     button(at, "Reset").click().run()
     assert len(at.session_state["explain_cache"]) == 0

@@ -14,10 +14,10 @@ audience-aware football intelligence for studio, streaming, and fan experiences.
 | Time | Click | Say |
 |---|---|---|
 | 0:00 | — | "ShiftLens: evidence-backed match intelligence for every turning point. It turns a Premier League-style match into explanations a studio can put on air and fans can follow on a second screen, and every number can be traced." |
-| 0:10 | **Play** | "This is **synthetic** data: a football-realistic 22-minute match we designed as a Premier League-style broadcast scenario, with fictional clubs and players. No real Premier League data, clubs or players. This is a simulated replay, not a live feed." |
+| 0:10 | **Play** | "This is **synthetic** data: a football-realistic 90-minute match we designed as a Premier League-style broadcast scenario, with fictional clubs and players. No real Premier League data, clubs or players. This is a simulated replay, not a live feed." |
 | 0:20 | **Explain this moment** (while playing) | "Explanations only run while paused, so nothing is narrated while play is running." |
 | 0:25 | **Pause** | "Every metric is computed in Python, **deterministically**: same second, same numbers, every time." |
-| 0:30 | **Momentum swing (10:10)** | "This jumps to the turning point: right after the equaliser, the pressure swung towards Harbor City. Territorial control shows where the game is being played." |
+| 0:30 | **Momentum swing (16:40)** | "This jumps to the turning point: Northbridge were on top, then the pressure swung towards Harbor City. Territorial control shows where the game is being played." |
 | 0:33 | Point at **📰 Match read** | "The match read calls the state of the game: here it is shifting, Harbor City on the front foot, Northbridge FC still with more of the ball." |
 | 0:35 | **Explain this moment** | Read the Fan Lens headline and one key point. "Short and plain for fans and streaming viewers." |
 | 0:50 | Point at the status line | "Source: deterministic fallback, validated ✓, with metric and event references and latency." |
@@ -25,7 +25,7 @@ audience-aware football intelligence for studio, streaming, and fan experiences.
 | 1:05 | Tactical workspace tabs: **🥅 Shot map** → **🔗 Pass network** | "Shot Quality Index and the pass network are synthetic proxies built from zone, lane and the event chain. We say not xG, because it isn't." |
 | 1:10 | Scroll to **Traceability** | "Formula version, config version, window and the exact source event IDs for each number." |
 | 1:20 | Point at **Data limits** | "Pass share is not possession, danger is not xG, there are no predictions or betting advice." |
-| 1:30 | **Late pressure (19:40)** → **Goal moment (20:21)** → **Explain this moment** | "Late pressure from Northbridge, then the winner. Same validation on every explanation." |
+| 1:30 | **Late pressure (77:30)** → **Goal moment (84:20)** → **Explain this moment** | "Late pressure from Northbridge, then the winner. Same validation on every explanation." |
 | 1:45 | **Reset** | "Reset clears the replay and the explanation cache." |
 
 ## What to say about the optional Foundry path
@@ -50,7 +50,7 @@ This is optional and manual. The path is **not validated** until these steps suc
    Never paste the key into chat, docs or screenshots.
 2. Turn offline mode off: `MATCHPULSE_OFFLINE=0` in `.env`.
 3. Launch: `.venv\Scripts\python -m streamlit run streamlit_app.py`.
-4. Click **Momentum swing (10:10)**, select **Fan Lens**, then press **Explain this moment**.
+4. Click **Momentum swing (16:40)**, select **Fan Lens**, then press **Explain this moment**.
 5. Confirm the status line reads **Source: Foundry · grounded ✓ validated**. If it reads *deterministic
    fallback after N rejected online attempt(s)*, the call failed or was rejected: check the endpoint, key,
    deployment and API version.

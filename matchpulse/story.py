@@ -9,7 +9,7 @@ from .metrics import event_time
 from .replay import clock_label
 
 BASE_STEP_SECONDS = 10  # simulated seconds per real-second tick at 1x
-SPEEDS = {"0.5x": 0.5, "1x": 1.0, "1.5x": 1.5, "2x": 2.0}
+SPEEDS = {"0.5x": 0.5, "1x": 1.0, "1.5x": 1.5, "2x": 2.0, "4x": 4.0}
 DEFAULT_SPEED = "1x"
 SHOT_WORDS = {"saved": "saved", "off_target": "wide", "blocked": "blocked"}
 CARD_TYPES = {"yellow_card": "yellow", "red_card": "red"}  # not in schema 1.0.0; counted if ever present

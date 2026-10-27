@@ -13,7 +13,23 @@ SCHEMA_PATH = ROOT / "config" / "match_schema.json"
 CONFIG_PATH = ROOT / "config" / "metrics_config.json"
 DEFAULT_DATASET = ROOT / "data" / "match_demo.json"
 
-OPTIONAL_EVENT_FIELDS = ("player_id", "outcome", "lane")
+OPTIONAL_EVENT_FIELDS = ("player_id", "outcome", "lane", "x", "y", "end_x", "end_y", "xg")
+SHOT_TYPES = ("shot", "goal")
+
+
+def zone_of(x: float, y: float) -> str:
+    """Zone from synthetic coordinates in the acting team's frame (x 0–100 towards the attacked goal)."""
+    in_box_width = 21 <= y <= 79
+    if x <= 17 and in_box_width:
+        return "own_box"
+    if x >= 83 and in_box_width:
+        return "opp_box"
+    return "defensive_third" if x < 100 / 3 else "middle_third" if x < 200 / 3 else "attacking_third"
+
+
+def lane_of(y: float) -> str:
+    """Lane from y (100 = the acting team's left touchline)."""
+    return "left" if y > 200 / 3 else "right" if y < 100 / 3 else "center"
 
 
 def load_json(path: str | Path) -> dict:
@@ -74,6 +90,18 @@ def rule_errors(data: dict) -> list[str]:
                 errors.append(f"{where}: unknown player_id '{pid}'")
             elif player_team[pid] != ev["team_id"]:
                 errors.append(f"{where}: player '{pid}' does not belong to team '{ev['team_id']}'")
+
+        if ("x" in ev) != ("y" in ev) or ("end_x" in ev) != ("end_y" in ev):
+            errors.append(f"{where}: coordinates must come in x/y pairs")
+        elif "x" in ev:
+            if zone_of(ev["x"], ev["y"]) != ev["zone"]:
+                errors.append(f"{where}: zone '{ev['zone']}' does not match x/y ({ev['x']}, {ev['y']})")
+            if ev.get("lane") is not None and lane_of(ev["y"]) != ev["lane"]:
+                errors.append(f"{where}: lane '{ev['lane']}' does not match y {ev['y']}")
+        if "xg" in ev and ev["type"] not in SHOT_TYPES:
+            errors.append(f"{where}: xg on a non-shot event")
+        if data["duration_minutes"] >= 90 and (ev["period"] == 1) != (ev["minute"] < data["duration_minutes"] // 2):
+            errors.append(f"{where}: period {ev['period']} does not match minute {ev['minute']}")
 
         if ev["type"] == "goal":
             if pid is None:

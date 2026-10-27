@@ -19,7 +19,7 @@ def replay():
 
 @pytest.fixture(scope="module")
 def events(replay):
-    return replay.snapshot(1320)["events"]
+    return replay.snapshot(5400)["events"]
 
 
 @pytest.fixture(scope="module")
@@ -45,21 +45,21 @@ def test_shot_quality_is_bounded():
 
 
 def test_shots_cover_every_shot_and_goal(events, shot_list):
-    assert len(shot_list) == sum(1 for e in events if e["type"] in ("shot", "goal")) == 16
+    assert len(shot_list) == sum(1 for e in events if e["type"] in ("shot", "goal")) == 43
     assert [s["outcome"] for s in shot_list].count("goal") == 3
-    winner = next(s for s in shot_list if s["event_id"] == "E095")
-    assert (winner["setup_player_id"], winner["setup_type"], winner["sqi"]) == ("NBR-07", "pass", 0.51)
-    saved = next(s for s in shot_list if s["clock"] == "03:13")
+    winner = next(s for s in shot_list if s["event_id"] == "E0990")
+    assert (winner["setup_player_id"], winner["setup_type"], winner["sqi"]) == ("NBR-07", "cross", 0.53)
+    saved = next(s for s in shot_list if s["clock"] == "04:44")
     assert saved["keeper_id"] == "HBC-01"
 
 
 def test_team_summary_and_proxies(shot_list):
     summary = A.team_shot_summary(shot_list, ("NBR", "HBC"))
-    assert summary["NBR"] == {"shots": 8, "goals": 2, "sqi_total": 3.37, "sqi_avg": 0.42, "best": 0.53}
+    assert summary["NBR"] == {"shots": 25, "goals": 2, "sqi_total": 9.3, "sqi_avg": 0.37, "best": 0.53}
     cci = A.chance_creation(shot_list)
-    assert cci["NBR-07"] == {"cci": 2.07, "chances": 4, "assists": 1}
-    assert A.prevented_danger(shot_list) == {"HBC-01": {"saves": 2, "prevented": 0.98},
-                                             "NBR-01": {"saves": 3, "prevented": 1.08}}
+    assert cci["HBC-07"] == {"cci": 1.23, "chances": 3, "assists": 1}
+    assert A.prevented_danger(shot_list) == {"HBC-01": {"saves": 9, "prevented": 2.9},
+                                             "NBR-01": {"saves": 4, "prevented": 1.32}}
 
 
 def test_proxies_are_deterministic(events):
@@ -71,13 +71,13 @@ def test_proxies_are_deterministic(events):
 def test_player_badges_from_event_chain(events):
     b = A.player_badges(events)
     assert b["NBR-09"]["goals"] == 1 and b["NBR-10"]["goals"] == 1 and b["HBC-09"]["goals"] == 1
-    assert b["NBR-11"]["assists"] == 1 and b["NBR-07"]["assists"] == 1 and b["HBC-07"]["assists"] == 1
+    assert b["NBR-10"]["assists"] == 1 and b["NBR-07"]["assists"] == 1 and b["HBC-07"]["assists"] == 1
     assert all(v["yellow"] == v["red"] == 0 for v in b.values())
 
 
 def test_badges_respect_the_clock(replay):
-    assert A.player_badges(replay.snapshot(400)["events"]) == {}
-    assert A.player_badges(replay.snapshot(414)["events"])["NBR-09"]["goals"] == 1
+    assert A.player_badges(replay.snapshot(1389)["events"]) == {}
+    assert A.player_badges(replay.snapshot(1390)["events"])["NBR-09"]["goals"] == 1
 
 
 def test_card_badges_when_present():
@@ -105,7 +105,7 @@ def test_defensive_actions_and_pass_links(events):
     assert len(pts) == sum(1 for e in events if e["type"] in A.DEFENSIVE_TYPES)
     assert len({(p["x"], p["y"]) for p in pts if p["team_id"] == "NBR"}) > 1
     links = A.pass_links(events, "NBR")
-    assert links[("NBR-08", "NBR-07")] == 2 and all(a.startswith("NBR") and b.startswith("NBR") for a, b in links)
+    assert links[("NBR-04", "NBR-08")] == 9 and all(a.startswith("NBR") and b.startswith("NBR") for a, b in links)
 
 
 def test_analyst_figures_build(replay, events, shot_list):
@@ -173,6 +173,7 @@ def test_theme_tokens_and_logo_crops():
 
 def test_ui_analyst_workspace_and_fan_layout():
     at = AppTest.from_file(str(ROOT / "streamlit_app.py"), default_timeout=30)
+    at.session_state["mode"] = "Fan"  # Home is the landing view; these flows start in Fan Lens
     at.run()
     assert any("Fan Lens · broadcaster companion" in m.value for m in at.markdown)
     next(b for b in at.button if b.label.startswith("Goal moment")).click().run()

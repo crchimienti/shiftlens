@@ -6,7 +6,7 @@ from streamlit.testing.v1 import AppTest
 from matchpulse.replay import Replay, ReplayState, clock_label
 from matchpulse.validator import CONFIG_PATH, ROOT, load_json, load_match
 
-DURATION = 22 * 60
+DURATION = 90 * 60
 
 
 @pytest.fixture(scope="module")
@@ -79,7 +79,7 @@ def test_reset_returns_to_zero_and_stops():
 
 
 def test_clock_label():
-    assert clock_label(0) == "00:00" and clock_label(605) == "10:05" and clock_label(1320) == "22:00"
+    assert clock_label(0) == "00:00" and clock_label(605) == "10:05" and clock_label(5400) == "90:00"
 
 
 # --- snapshots --------------------------------------------------------------
@@ -87,7 +87,7 @@ def test_clock_label():
 def test_snapshot_at_zero(replay):
     snap = replay.snapshot(0)
     assert snap["clock"] == "00:00" and snap["period"] == 1
-    assert [e["event_id"] for e in snap["events"]] == ["E001"]  # kickoff at 00:00 is visible
+    assert [e["event_id"] for e in snap["events"]] == ["E0001"]  # kickoff at 00:00 is visible
     assert snap["metrics"]["score"]["value"] == {"NBR": 0, "HBC": 0}
 
 
@@ -100,8 +100,8 @@ def test_snapshot_fixed_time_is_stable(replay):
 
 
 def test_snapshot_period_follows_events(replay):
-    assert replay.snapshot(659)["period"] == 1
-    assert replay.snapshot(660)["period"] == 2
+    assert replay.snapshot(2699)["period"] == 1
+    assert replay.snapshot(2700)["period"] == 2  # second-half kick-off at 45:00
 
 
 def test_reset_gives_same_snapshot_as_fresh_start(replay):
@@ -146,6 +146,7 @@ def button(at, label):
 @pytest.fixture
 def app():
     at = AppTest.from_file(APP, default_timeout=30)
+    at.session_state["mode"] = "Fan"  # Home is the landing view; these flows start in Fan Lens
     at.run()
     assert not at.exception
     return at
@@ -159,8 +160,8 @@ def test_ui_renders_initial_state(app):
 
 
 def test_ui_seek_play_pause_reset(app):
-    app.select_slider[0].set_value(1320).run()
-    assert app.session_state["replay_state"].clock == 1320
+    app.select_slider[0].set_value(5400).run()
+    assert app.session_state["replay_state"].clock == 5400
     assert any("2 – 1" in m.value for m in app.markdown)
 
     app.select_slider[0].set_value(300).run()

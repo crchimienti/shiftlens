@@ -55,11 +55,11 @@ def test_gain_is_destination_minus_origin_within_one_team_and_move(full):
 
 
 def test_goal_move_gains_threat_mostly_through_the_cross(full):
-    s09 = [ev for ev in full["events"] if ev["sequence_id"] == "S09"]
+    s216 = [ev for ev in full["events"] if ev["sequence_id"] == "S216"]
     gains = T.threat_gains(full["events"])
-    cross = next(ev for ev in s09 if ev["type"] == "cross")
-    assert gains[cross["event_id"]]["gain"] == max(gains[ev["event_id"]]["gain"] for ev in s09 if ev["event_id"] in gains)
-    mt = T.move_threat(s09)
+    cross = next(ev for ev in s216 if ev["type"] == "cross")
+    assert gains[cross["event_id"]]["gain"] == max(gains[ev["event_id"]]["gain"] for ev in s216 if ev["event_id"] in gains)
+    mt = T.move_threat(s216)
     assert mt["net_gain"] > 0 and mt["peak"] == T.ZONE_THREAT["opp_box"]["center"]
 
 
@@ -101,7 +101,7 @@ def test_threat_stays_out_of_metrics_and_explanations(replay, full):
 
 def test_analyst_pitch_colours_paths_by_threat_and_shows_a_legend(replay, full):
     home, away = replay.match["home_team"], replay.match["away_team"]
-    pts = move_points(move_events(full, "S09"), "NBR", replay.players, replay.config)
+    pts = move_points(move_events(full, "S216"), "NBR", replay.players, replay.config)
     gains = T.threat_gains(full["events"])
     fig = pitch_figure(pts, home, away, detailed=True, threat=gains)
     paths = [s for s in fig.layout.shapes if s.type == "path"]
@@ -119,7 +119,7 @@ def test_analyst_pitch_colours_paths_by_threat_and_shows_a_legend(replay, full):
 
 def test_danger_map_is_neutral_labelled_and_keeps_team_coloured_paths(replay, full):
     home, away = replay.match["home_team"], replay.match["away_team"]
-    pts = move_points(move_events(full, "S09"), "NBR", replay.players, replay.config)
+    pts = move_points(move_events(full, "S216"), "NBR", replay.players, replay.config)
     fig = pitch_figure(pts, home, away, detailed=True, underlay=T.threat_underlay(True),
                        cell_labels=T.threat_cell_labels(True))
     cells = [s for s in fig.layout.shapes
@@ -136,7 +136,7 @@ def test_danger_map_is_neutral_labelled_and_keeps_team_coloured_paths(replay, fu
 
 def test_attack_direction_and_target_goal_are_drawn_on_the_pitch(replay, full):
     home, away = replay.match["home_team"], replay.match["away_team"]
-    pts = move_points(move_events(full, "S09"), "NBR", replay.players, replay.config)
+    pts = move_points(move_events(full, "S216"), "NBR", replay.players, replay.config)
     attack = {"team": "Northbridge FC", "target": "Harbor City", "right": True, "color": "#2563eb"}
     fig = pitch_figure(pts, home, away, detailed=True, threat=T.threat_gains(full["events"]), attack=attack)
     texts = [str(a.text) for a in fig.layout.annotations]
@@ -160,7 +160,7 @@ def test_describe_gain_reads_plainly(full):
 
 def test_fan_pitch_has_no_threat_layer(replay, full):
     home, away = replay.match["home_team"], replay.match["away_team"]
-    pts = move_points(move_events(full, "S09"), "NBR", replay.players, replay.config)
+    pts = move_points(move_events(full, "S216"), "NBR", replay.players, replay.config)
     fig = pitch_figure(pts, home, away)
     assert not any(a.text == THREAT_LEGEND for a in fig.layout.annotations)
     assert all(p.line.color in ("#2563eb", "#ea580c") for p in fig.layout.shapes if p.type == "path")
@@ -168,12 +168,12 @@ def test_fan_pitch_has_no_threat_layer(replay, full):
 
 def test_focus_dims_the_rest_and_labels_the_selected_action(replay, full):
     home, away = replay.match["home_team"], replay.match["away_team"]
-    pts = move_points(move_events(full, "S09"), "NBR", replay.players, replay.config)
-    fig = pitch_figure(pts, home, away, detailed=True, highlight="E040")
+    pts = move_points(move_events(full, "S216"), "NBR", replay.players, replay.config)
+    fig = pitch_figure(pts, home, away, detailed=True, highlight="E0990")
     team = next(t for t in fig.data if t.name == "Northbridge FC")
     opacities = dict(zip(team.customdata[:, 5] if hasattr(team.customdata, "shape") else [c[5] for c in team.customdata],
                          team.marker.opacity))
-    assert opacities["E040"] == 1.0 and min(opacities.values()) < 1.0
+    assert opacities["E0990"] == 1.0 and min(opacities.values()) < 1.0
     assert any("Goal" in str(a.text) and a.bgcolor for a in fig.layout.annotations if not a.showarrow)
 
 
@@ -210,6 +210,7 @@ def test_pass_network_colours_links_by_threat_and_labels_the_busiest(replay, ful
 
 def test_analyst_workspace_shows_threat_surfaces():
     at = AppTest.from_file(str(ROOT / "streamlit_app.py"), default_timeout=30)
+    at.session_state["mode"] = "Fan"  # Home is the landing view; these flows start in Fan Lens
     at.run()
     next(b for b in at.button if b.label.startswith("Goal moment")).click().run()
     at.radio[0].set_value("Analyst").run()
